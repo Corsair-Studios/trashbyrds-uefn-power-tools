@@ -35,4 +35,4 @@ The MCP server and the in-editor Python bridge are two separate processes that h
 
 ## Install
 
-See [INSTALL.md](INSTALL.md) for step-by-step setup.
+See [INSTALL.md](INSTALL.md) for step-by-step setup, including how to connect the MCP server to your AI client of choice (Claude Code, Gemini CLI, Codex CLI, Cursor, Windsurf, Antigravity IDE, or VS Code Copilot).
