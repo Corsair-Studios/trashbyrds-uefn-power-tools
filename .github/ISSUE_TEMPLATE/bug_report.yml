@@ -1,0 +1,103 @@
+name: "Bug Report"
+description: "Report something broken in Trashbyrds UEFN Power Tools."
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. This project is **beta software** —
+        rough edges are expected, and detailed reports help fix them fast.
+
+        Before filing, please search [existing issues](../../issues) to see if this
+        has already been reported.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug you ran into.
+      placeholder: Tell us what went wrong.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-expected
+    attributes:
+      label: What did you expect to happen?
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps so the bug can be reproduced from scratch.
+      placeholder: |
+        1. Open UEFN and load '...'
+        2. Run '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mcp-client
+    attributes:
+      label: Which MCP client are you using?
+      description: >
+        Only Claude Code is well tested at this time. Other clients are
+        experimental and may have client-specific quirks.
+      options:
+        - Claude Code
+        - Gemini CLI
+        - Codex CLI
+        - Cursor
+        - Windsurf
+        - VS Code Copilot
+        - Other / not applicable
+    validations:
+      required: true
+
+  - type: input
+    id: uefn-version
+    attributes:
+      label: UEFN version
+      placeholder: e.g. 34.10
+    validations:
+      required: true
+
+  - type: input
+    id: power-tools-version
+    attributes:
+      label: Power Tools version
+      description: >
+        The release version (e.g. 2026.8.21), or "cloned from source" if
+        you're running from a git checkout.
+      placeholder: e.g. 2026.8.21 or "cloned from source"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Windows 11
+    validations:
+      required: false
+
+  - type: textarea
+    id: console-output
+    attributes:
+      label: UEFN Python console output / error text
+      description: Paste any relevant output from UEFN's Python console, or error text.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else?
+      description: Additional context, screenshots, logs, etc.
+    validations:
+      required: false
