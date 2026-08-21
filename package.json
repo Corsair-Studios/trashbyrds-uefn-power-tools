@@ -1,6 +1,6 @@
 {
   "name": "trashbyrds-uefn-power-tools",
-  "version": "2026.8.21-b",
+  "version": "0.1.0",
   "description": "MCP server + Python tools for live, chat-driven inspection and editing of a UEFN project, Verse, and assets.",
   "type": "module",
   "scripts": {
