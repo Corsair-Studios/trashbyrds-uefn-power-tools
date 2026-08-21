@@ -13,6 +13,7 @@ Usage:  Execute from UEFN's Python console or Output Log:
 """
 
 import unreal
+import glob
 import json
 import os
 import datetime
@@ -511,87 +512,425 @@ def _ue_class_to_verse_keys(class_name):
 _VERSE_SCAN_SKIP = frozenset({"Saved", "Intermediate", "__pycache__", ".uefn_bridge"})
 
 
+def _is_inside_fortnite_install(directory):
+    """Return True if *directory* structurally sits inside an Epic/Fortnite
+    ENGINE install tree rather than a user project — i.e. one of its path
+    segments is "FortniteGame" and a later segment is "Plugins" (the shape
+    of .../FortniteGame/Plugins/VerseDevices/ScriptTemplates, Epic's
+    template .verse files). Detected structurally so this works regardless
+    of install drive/location (per docs/PATH-DISCOVERY.md — never match a
+    hardcoded "C:\\Program Files" string). Never raises."""
+    try:
+        parts = [p for p in os.path.normpath(directory).split(os.sep) if p]
+        if "FortniteGame" not in parts:
+            return False
+        idx = parts.index("FortniteGame")
+        return "Plugins" in parts[idx + 1:]
+    except Exception:
+        return False
+
+
+def _has_verse(directory):
+    """Return True if *directory* contains at least one .verse file (any depth, capped)."""
+    try:
+        for root_dir, dirs, files in os.walk(directory):
+            # Prune skip dirs in-place
+            dirs[:] = [d for d in dirs if d not in _VERSE_SCAN_SKIP]
+            # Depth cap: stop if we are too deep (>4 levels below directory)
+            rel = os.path.relpath(root_dir, directory)
+            depth = 0 if rel == '.' else rel.count(os.sep) + 1
+            if depth > 4:
+                dirs[:] = []
+                continue
+            for fname in files:
+                if fname.endswith('.verse'):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def _looks_like_real_project(directory):
+    """Content-based signal (docs/PATH-DISCOVERY.md sec. 3) that *directory*
+    is a genuine UEFN project tree, not merely a folder that happens to
+    contain .verse files (e.g. Epic's ScriptTemplates): it must have
+    .verse files AND a Content/__ExternalActors__ directory somewhere
+    under it (checked at *directory* itself and at its parent, since
+    *directory* may already BE the Content dir). Never raises."""
+    try:
+        if not _has_verse(directory):
+            return False
+        for base in (directory, os.path.dirname(directory)):
+            if os.path.isdir(os.path.join(base, "__ExternalActors__")):
+                return True
+            if os.path.isdir(os.path.join(base, "Content", "__ExternalActors__")):
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def _registry_fortnite_projects_roots():
+    """Read the Windows "Personal" (Documents) known-folder value straight
+    from the registry — the authoritative source regardless of
+    OneDrive/other redirection schemes (docs/PATH-DISCOVERY.md sec. 4,
+    same signal as init_unreal.py's project-root discovery) — and return
+    the "Fortnite Projects" directory under it (existence not checked).
+    Windows-only and fail-open end-to-end: wrong platform, missing key, or
+    any other failure yields an empty list, never an exception. Returns a
+    list (0 or 1 entries today) so callers can treat it uniformly with
+    other multi-signal root sources per PATH-DISCOVERY.md sec. 2 (multiple
+    independent signals, de-duplicated) — shared by
+    ``_registry_fortnite_project_candidates`` (rung 3, globs project dirs
+    under it) and ``_editor_world_project_dir_candidate`` (the editor-world
+    rung, which resolves a specific mount name under it)."""
+    roots = []
+    try:
+        import winreg as _winreg
+        with _winreg.OpenKey(
+            _winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+        ) as _key:
+            _personal_raw, _ = _winreg.QueryValueEx(_key, "Personal")
+        _personal = os.path.expandvars(_personal_raw)
+        if _personal:
+            roots.append(os.path.join(_personal, "Fortnite Projects"))
+    except Exception:
+        pass
+    return roots
+
+
+def _registry_fortnite_project_candidates():
+    """Rung 3 of the discovery ladder: glob for "Fortnite Projects\\*" dirs
+    under each root from ``_registry_fortnite_projects_roots``. Windows-only
+    and fail-open end-to-end: wrong platform, missing key, or any other
+    failure yields an empty list, never an exception. Returns a list of
+    candidate project directories (existence not yet checked)."""
+    candidates = []
+    for _root in _registry_fortnite_projects_roots():
+        try:
+            for _proj_dir in glob.glob(os.path.join(_root, "*")):
+                if not os.path.isdir(_proj_dir):
+                    continue
+                # Prefer the project's Content/ dir (what every other rung
+                # returns) when present; otherwise fall back to the
+                # project root itself so _has_verse's own depth-capped
+                # walk still has a chance to find it.
+                _proj_content = os.path.join(_proj_dir, "Content")
+                if os.path.isdir(_proj_content):
+                    candidates.append(_proj_content)
+                else:
+                    candidates.append(_proj_dir)
+        except Exception:
+            pass
+    return candidates
+
+
+def _unreal_project_dir_candidate():
+    """A discovery-ladder candidate: ask the embedded ``unreal`` API for
+    the live project's directory. MEASURED FINDING (live UEFN session,
+    2026-08-19): every ``unreal.Paths`` function — ``project_dir``,
+    ``project_content_dir``, ``project_config_dir``, ``project_plugins_dir``,
+    and ``get_project_file_path`` — returns a path rooted at
+    ``.../FortniteGame/...``, i.e. the ENGINE INSTALL, never the user's
+    actual open project (StarWars, DetonationDemo, etc.). In UEFN "the
+    project" from the engine's own perspective is always FortniteGame, so
+    this rung is STRUCTURALLY INCAPABLE of naming the user's project — it
+    is not a bug fixable in place, just a signal that doesn't exist here.
+    Kept (rather than removed) because it's harmless, the caller already
+    validates its result through ``_is_inside_fortnite_install`` /
+    ``_looks_like_real_project`` like every other candidate, and it could
+    become useful again if Epic ever changes what Paths reports — nobody
+    should re-investigate this without cause. The real open-project signal
+    is the editor world's package path — see
+    ``_editor_world_project_dir_candidate``, which runs BEFORE this rung.
+    Guarded end-to-end: any missing attribute, exception, or non-directory
+    result yields None. Never raises."""
+    try:
+        paths_cls = getattr(unreal, "Paths", None)
+        if paths_cls is None:
+            return None
+        for _method in ("project_content_dir", "project_dir"):
+            _fn = getattr(paths_cls, _method, None)
+            if _fn is None:
+                continue
+            try:
+                _value = _fn()
+            except Exception:
+                continue
+            if _value and os.path.isdir(_value):
+                return os.path.normpath(_value)
+    except Exception:
+        pass
+    return None
+
+
+# Package-path mount points that name ENGINE content, never a user's UEFN
+# project — the editor world's path always starts with one of these when
+# no user project is actually open, or when Epic's own content is what's
+# loaded. Rejected outright so the editor-world rung below can never
+# resolve to an engine tree.
+_ENGINE_WORLD_MOUNTS = frozenset({"Game", "Engine", "Temp", "Script", "FortniteGame"})
+
+
+def _editor_world_mount_name():
+    """Return the open UEFN project's package-path MOUNT POINT (e.g.
+    ``"StarWars"``), or None. MEASURED FINDING (live UEFN session,
+    2026-08-19): the editor world's package path — e.g.
+    ``/StarWars/StarWars.StarWars`` when StarWars is the open project — is
+    authoritative ground truth for which project is open, unlike
+    ``unreal.Paths`` (see ``_unreal_project_dir_candidate``'s docstring),
+    because the mount point is the project's own outer package namespace,
+    not the engine's. Tries the modern editor subsystem API first, then
+    falls back to the legacy ``EditorLevelLibrary``, since which one is
+    available varies by UEFN/engine version. Every attribute access is
+    guarded individually so a stub/partial ``unreal`` module (as used in
+    tests, or an older API surface) degrades to None rather than raising.
+    Rejects known-engine mounts (``_ENGINE_WORLD_MOUNTS``) since those name
+    engine content, not a user project. Never raises."""
+    world = None
+
+    # Preferred: unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).
+    try:
+        get_subsystem = getattr(unreal, "get_editor_subsystem", None)
+        subsystem_cls = getattr(unreal, "UnrealEditorSubsystem", None)
+        if get_subsystem is not None and subsystem_cls is not None:
+            subsystem = get_subsystem(subsystem_cls)
+            get_world = getattr(subsystem, "get_editor_world", None)
+            if get_world is not None:
+                world = get_world()
+    except Exception:
+        world = None
+
+    # Fallback: the legacy unreal.EditorLevelLibrary.get_editor_world().
+    if world is None:
+        try:
+            level_lib = getattr(unreal, "EditorLevelLibrary", None)
+            get_world = getattr(level_lib, "get_editor_world", None) if level_lib is not None else None
+            if get_world is not None:
+                world = get_world()
+        except Exception:
+            world = None
+
+    if world is None:
+        return None
+
+    try:
+        get_path_name = getattr(world, "get_path_name", None)
+        if get_path_name is None:
+            return None
+        path_name = get_path_name()
+        if not path_name:
+            return None
+        # e.g. "/StarWars/StarWars.StarWars" -> "StarWars"
+        segment = path_name.lstrip("/").split("/", 1)[0]
+        segment = segment.split(".", 1)[0]
+        if not segment or segment in _ENGINE_WORLD_MOUNTS:
+            return None
+        return segment
+    except Exception:
+        return None
+
+
+def _editor_world_project_dir_candidate():
+    """The editor-world rung: resolve the open UEFN project's directory
+    from the editor world's package-path mount point
+    (``_editor_world_mount_name``) — the exact fix for the measured
+    regression where StarWars was open but discovery returned
+    DetonationDemo's dir because the registry rung (rung 3) picks by
+    directory-listing order among several candidate projects. Per
+    docs/PATH-DISCOVERY.md sec. 3 (content-based over name-based matching)
+    this still isn't a bare name match: the mount name only becomes a
+    result once ``<root>/<MountName>`` is confirmed to exist AND is run
+    through the same ``_looks_like_real_project`` content check
+    (.verse files + Content/__ExternalActors__) every other rung uses, and
+    the caller re-validates it again like any other candidate. Does NOT
+    assume a single hardcoded parent — it reuses the same candidate roots
+    ``_registry_fortnite_project_candidates`` derives from the registry
+    "Personal" shell-folder value (``_registry_fortnite_projects_roots``),
+    since that is this module's only known way to enumerate "Fortnite
+    Projects" parent directories today. Guarded end-to-end: any failure at
+    any step (no world, no mount, no matching directory) yields None.
+    Never raises."""
+    try:
+        mount = _editor_world_mount_name()
+        if not mount:
+            return None
+        roots = _registry_fortnite_projects_roots()
+        best = None
+        for root in roots:
+            candidate_root = os.path.join(root, mount)
+            if not os.path.isdir(candidate_root):
+                continue
+            candidate_content = os.path.join(candidate_root, "Content")
+            candidate = candidate_content if os.path.isdir(candidate_content) else candidate_root
+            if best is None:
+                best = candidate
+            if _looks_like_real_project(candidate):
+                return candidate
+        return best
+    except Exception:
+        return None
+
+
 def _find_verse_dir():
     """
-    Locate the directory tree containing .verse files.
+    Locate the directory tree containing the USER'S UEFN project's .verse
+    files — per the discovery ladder in docs/PATH-DISCOVERY.md (this
+    function is that document's cited exemplar for this module):
 
-    Search strategy (in order, returns the first hit):
-    1. Content/ parent of the script's Python/ folder (original logic).
-    2. Any sibling directories under the same Content/ parent.
-    3. Plugin Content dirs: walk up until a Plugins/ folder is found, then
-       scan each Plugins/<plugin>/Content subtree (one level deep).
-    4. Project root one level above Plugins/.
+    1. ``UEFN_VERSE_PROJECT_DIR`` env override — always wins. If set but
+       does not resolve to a directory with .verse files, that is an
+       explicit failure (reported in the final warning), never a silent
+       fall-through to guessing.
+    2. The OPEN project's directory, resolved from the editor world's
+       package-path mount point (e.g. ``/StarWars/StarWars.StarWars`` ->
+       ``StarWars``) — see ``_editor_world_project_dir_candidate``. This is
+       the fix for the measured regression where StarWars was the open
+       project but discovery returned DetonationDemo's Content dir,
+       because with 8 candidate projects on disk, later rungs pick by
+       directory-listing order, not by what's actually open. Engine mounts
+       (``Game``, ``Engine``, ``Temp``, ``Script``, ``FortniteGame``) are
+       rejected outright — see ``_ENGINE_WORLD_MOUNTS``.
+    3. The live project path from ``unreal.Paths`` (project_content_dir /
+       project_dir), validated — rejected if it lies inside a Fortnite
+       engine install tree or doesn't look like a real project. MEASURED
+       FINDING: in UEFN this always returns the FortniteGame ENGINE
+       INSTALL, never the user's actual project — see
+       ``_unreal_project_dir_candidate``'s docstring — so this rung exists
+       only as a safety net, never as the primary signal.
+    4. The Windows registry's "Personal" (Documents) known folder,
+       expanded and globbed for "Fortnite Projects\\*" dirs. Windows-only,
+       fails open on any other platform or if the key/module is missing.
+    5. The original ``__file__``-relative strategies (Content/ parent,
+       sibling Content dirs, Plugins/ walk-up) — KEPT, but every candidate
+       they produce is now rejected if it sits inside a Fortnite/Epic
+       engine install tree (structural check: a "FortniteGame" segment
+       followed later by a "Plugins" segment — see
+       ``_is_inside_fortnite_install``), so the engine copy can never again
+       resolve to Plugins/VerseDevices/ScriptTemplates.
+
+    Across every rung, when multiple candidates survive, the one that
+    "looks like a real project" (.verse files AND a
+    Content/__ExternalActors__ directory — content-based selection per
+    docs/PATH-DISCOVERY.md sec. 3) is preferred over a bare .verse-only
+    directory.
 
     Directories named Saved, Intermediate, __pycache__, or .uefn_bridge are
     skipped to avoid scanning large generated-file trees.
 
-    Returns the directory path where .verse files were found, or None.
+    Returns the directory path where .verse files were found, or None —
+    and on total failure, logs a warning listing every location tried and
+    naming UEFN_VERSE_PROJECT_DIR as the override (never returns a
+    wrong-but-plausible directory).
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    tried = []
 
-    def _has_verse(directory):
-        """Return True if *directory* contains at least one .verse file (any depth, capped)."""
-        try:
-            for root_dir, dirs, files in os.walk(directory):
-                # Prune skip dirs in-place
-                dirs[:] = [d for d in dirs if d not in _VERSE_SCAN_SKIP]
-                # Depth cap: stop if we are too deep (>4 levels below directory)
-                rel = os.path.relpath(root_dir, directory)
-                depth = 0 if rel == '.' else rel.count(os.sep) + 1
-                if depth > 4:
-                    dirs[:] = []
-                    continue
-                for fname in files:
-                    if fname.endswith('.verse'):
-                        return True
-        except Exception:
-            pass
-        return False
+    def _record(label, path):
+        tried.append(f"{label}={path}" if path else f"{label}=<not found>")
 
-    # --- Strategy 1: Content/ parent (original) ---
+    # --- Rung 1: explicit env override — always wins ---
+    env_dir = os.environ.get("UEFN_VERSE_PROJECT_DIR")
+    if env_dir:
+        _record("UEFN_VERSE_PROJECT_DIR", env_dir)
+        if os.path.isdir(env_dir) and _has_verse(env_dir):
+            return env_dir
+        # Explicit-but-invalid override: fall through so the failure
+        # warning below reports it, but do NOT silently keep guessing
+        # past it as if it were unset — record it and continue collecting
+        # candidates only so the final message is informative.
+
+    candidates = []  # ordered list of (path, is_real_project) survivors
+
+    def _consider(path):
+        if not path:
+            return
+        norm = os.path.normpath(path)
+        if _is_inside_fortnite_install(norm):
+            return
+        if not (os.path.isdir(norm) and _has_verse(norm)):
+            return
+        for existing, _ in candidates:
+            if os.path.normcase(existing) == os.path.normcase(norm):
+                return
+        candidates.append((norm, _looks_like_real_project(norm)))
+
+    # --- Rung 2: OPEN project dir from the editor world's mount point ---
+    world_dir = _editor_world_project_dir_candidate()
+    _record("editor world mount project dir", world_dir)
+    if world_dir:
+        _consider(world_dir)
+
+    # --- Rung 3: live project path from unreal.Paths, validated ---
+    unreal_dir = _unreal_project_dir_candidate()
+    _record("unreal.Paths project dir", unreal_dir)
+    if unreal_dir:
+        _consider(unreal_dir)
+
+    # --- Rung 4: registry-derived Documents\Fortnite Projects\* ---
+    for reg_candidate in _registry_fortnite_project_candidates():
+        _record("registry Fortnite Projects candidate", reg_candidate)
+        _consider(reg_candidate)
+
+    # --- Rung 5: original __file__-relative strategies, install-tree-safe ---
+
+    # Strategy 1: Content/ parent (original).
     content_dir = os.path.dirname(script_dir)
-    if os.path.isdir(content_dir) and _has_verse(content_dir):
-        return content_dir
+    _record("Content/ parent of script dir", content_dir)
+    if not _is_inside_fortnite_install(content_dir):
+        _consider(content_dir)
 
-    # --- Strategy 2: Sibling Content dirs ---
+    # Strategy 2: sibling Content dirs.
     parent_of_content = os.path.dirname(content_dir)
     if os.path.isdir(parent_of_content):
         try:
             for sibling in os.listdir(parent_of_content):
                 sib_path = os.path.join(parent_of_content, sibling)
                 if os.path.isdir(sib_path) and sibling not in _VERSE_SCAN_SKIP:
-                    if _has_verse(sib_path):
-                        return sib_path
+                    if not _is_inside_fortnite_install(sib_path):
+                        _consider(sib_path)
         except Exception:
             pass
 
-    # --- Strategy 3 & 4: Walk up looking for Plugins/ directory ---
+    # Strategy 3 & 4: walk up looking for a Plugins/ directory.
     cursor = script_dir
     for _ in range(10):  # cap the walk
         plugins_dir = os.path.join(cursor, "Plugins")
         if os.path.isdir(plugins_dir):
-            # Scan each Plugins/<plugin>/Content subtree
             try:
                 for plugin_name in os.listdir(plugins_dir):
                     if plugin_name in _VERSE_SCAN_SKIP:
                         continue
                     plugin_content = os.path.join(plugins_dir, plugin_name, "Content")
-                    if os.path.isdir(plugin_content) and _has_verse(plugin_content):
-                        return plugin_content
+                    if os.path.isdir(plugin_content) and not _is_inside_fortnite_install(plugin_content):
+                        _record("Plugins/<plugin>/Content", plugin_content)
+                        _consider(plugin_content)
             except Exception:
                 pass
-            # Also check the project root itself (one level above Plugins/)
-            if _has_verse(cursor):
-                return cursor
+            # Also check the project root itself (one level above Plugins/).
+            if not _is_inside_fortnite_install(cursor):
+                _record("project root above Plugins/", cursor)
+                _consider(cursor)
             break
         parent = os.path.dirname(cursor)
         if parent == cursor:
             break
         cursor = parent
 
+    if candidates:
+        # Prefer a real-project-shaped candidate over a bare .verse dir;
+        # otherwise keep first-found (rung/strategy) order.
+        for path, is_real in candidates:
+            if is_real:
+                return path
+        return candidates[0][0]
+
     unreal.log_warning(
-        f"device_audit: _find_verse_dir: no .verse files found "
-        f"(searched from {script_dir})"
+        "device_audit: _find_verse_dir: no .verse files found in the "
+        "user's project (searched: " + "; ".join(tried) + "). Set "
+        "UEFN_VERSE_PROJECT_DIR to the project's Content directory to "
+        "override discovery."
     )
     return None
 
