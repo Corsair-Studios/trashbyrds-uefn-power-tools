@@ -10,7 +10,10 @@ An MCP server and in-editor Python bridge for live, chat-driven inspection and e
 
 ## Use at your own risk
 
-Running Python inside UEFN's embedded console has been associated with crashes, particularly around project sync — save your project often. If you've hit Python-related crashes before, consider turning Python off (disable the Python Editor Script Plugin under `Edit -> Plugins`, or otherwise stop the bridge) before you sync, then turning it back on afterward as a precaution until things are more stable. If you've never had trouble, you're probably fine. Power Tools is MIT licensed and provided as is — no responsibility for UEFN crashes, corrupted or lost project data, or anything else Python does to your project while the bridge is running.
+Power Tools is MIT licensed and provided as is, with no warranty and no
+responsibility for UEFN crashes, corrupted or lost project data, or anything
+else that happens to your project while the bridge is running. Save often, as
+you would with any tool that touches a live editor session.
 
 ## What it is
 
