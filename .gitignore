@@ -1,4 +1,5 @@
 node_modules/
+uefn-server.mjs
 **/__pycache__/
 *.pyc
 python/device_audit_*.json

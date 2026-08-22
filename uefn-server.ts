@@ -10,7 +10,7 @@ import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
-import { isBridgeVersionNewer, isNumericVersion } from "../src/shared/bridgeVersion";
+import { isBridgeVersionNewer, isNumericVersion } from "./version.js";
 
 // Bridge directory — honor env var or fall back to OS temp dir (matching Python's tempfile.gettempdir())
 const BRIDGE_DIR = process.env.UEFN_BRIDGE_DIR ?? path.join(os.tmpdir(), "uefn_bridge");

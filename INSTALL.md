@@ -93,16 +93,16 @@ The MCP server and the in-UEFN Python bridge communicate through file-based IPC 
 
 The MCP server (`uefn-server.mjs`) speaks plain stdio MCP, so any MCP-capable client can launch it the same way: a `command` plus `args` that run the server, with an optional `env` block for the [environment overrides](#environment-overrides) below. Each client stores that config in its own file, using its own key name, and each client resolves that file from a different location — the subsections below give a complete, standalone, step-by-step walkthrough for each one. Pick the section for the client you're using and follow it top to bottom; you should not need to read any other client's section.
 
-**Before you start any of these, know your server path.** Wherever you unzipped the Power Tools release is where `uefn-server.mjs` lives. That location must be **permanent** — not your Downloads folder, not a temp folder, not a location you plan to delete or move later — because every config below hard-codes a path to that file. If you move the unzipped folder after configuring a client, that client's config breaks until you update the path. In every example below, replace the placeholder path `D:/ACode/PowerToolsLocation/uefn-server.mjs` with the real, full path to your own `uefn-server.mjs`, using forward slashes (`/`) even on Windows — Node accepts forward slashes in paths, and using them avoids backslash-escaping mistakes in JSON and TOML files (double backslashes, `\\`, are easy to get wrong and are a real source of broken configs).
+**Before you start any of these, know your server path.** Wherever you unzipped the Power Tools release is where `uefn-server.mjs` lives. That location must be **permanent** — not your Downloads folder, not a temp folder, not a location you plan to delete or move later — because every config below hard-codes a path to that file. If you move the unzipped folder after configuring a client, that client's config breaks until you update the path. In every example below, replace the placeholder `<POWER_TOOLS_DIR>` (shown in config blocks as e.g. `<POWER_TOOLS_DIR>/uefn-server.mjs`, similar to a prose example like `C:/path/to/power-tools/uefn-server.mjs`) with the real, full path to your own `uefn-server.mjs`, using forward slashes (`/`) even on Windows — Node accepts forward slashes in paths, and using them avoids backslash-escaping mistakes in JSON and TOML files (double backslashes, `\\`, are easy to get wrong and are a real source of broken configs).
 
 **If you cloned the source repo instead** of downloading a release, and are running the TypeScript source directly (`npm start`), swap the `"command"`/`"args"` pair in every example below for:
 
 ```json
 "command": "npx",
-"args": ["tsx", "D:/ACode/trashbyrds-power-tools/uefn-server.ts"]
+"args": ["tsx", "<POWER_TOOLS_REPO>/uefn-server.ts"]
 ```
 
-(again, replace that path with your own clone's location).
+Replace `<POWER_TOOLS_REPO>` with the real, full path to your own clone's location.
 
 If you're using the in-UEFN launcher window (`import pt` → MCP Bridge info), its **Copy config for selected client** button fills in the real, discovered path and command for your install automatically — you don't need to hand-edit the placeholder paths below if you use that button. The walkthroughs below assume you're editing the config file by hand.
 
@@ -125,16 +125,16 @@ This is the **verified** integration — confirmed working end to end on a real 
   "mcpServers": {
     "uefn": {
       "command": "node",
-      "args": ["D:/ACode/PowerToolsLocation/uefn-server.mjs"],
+      "args": ["<POWER_TOOLS_DIR>/uefn-server.mjs"],
       "env": {
-        "UEFN_BRIDGE_DIR": "D:/ACode/PowerToolsLocation/bridge-dir"
+        "UEFN_BRIDGE_DIR": "<POWER_TOOLS_DIR>/bridge-dir"
       }
     }
   }
 }
 ```
 
-Replace `D:/ACode/PowerToolsLocation/uefn-server.mjs` with the real, full path to your own unzipped `uefn-server.mjs`. The `env` block is **optional** — if you don't need a non-default bridge directory, delete the entire `"env": { ... }` block (including its comma on the line above it) and just leave `"command"` and `"args"`.
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder. The `env` block is **optional** — if you don't need a non-default bridge directory, delete the entire `"env": { ... }` block (including its comma on the line above it) and just leave `"command"` and `"args"`.
 
 **4. Where to launch Claude Code from.** This is the step people get wrong. Claude Code only reads `.mcp.json` from the directory you **launch it in** — not from any other folder, and not recursively from parent folders. You must open your terminal (or your editor's integrated terminal) in your UEFN project root — the exact folder where you just created `.mcp.json` — and start Claude Code from there. If you launch Claude Code from your home directory, your Desktop, or any other folder, it will not find this `.mcp.json` and the `uefn` server will not appear at all.
 
@@ -171,13 +171,13 @@ This is a **verified** integration — confirmed working end to end on a real ma
 ```toml
 [mcp_servers.uefn]
 command = "node"
-args = ["D:/ACode/PowerToolsLocation/uefn-server.mjs"]
+args = ["<POWER_TOOLS_DIR>/uefn-server.mjs"]
 
 [mcp_servers.uefn.env]
-UEFN_BRIDGE_DIR = "D:/ACode/PowerToolsLocation/bridge-dir"
+UEFN_BRIDGE_DIR = "<POWER_TOOLS_DIR>/bridge-dir"
 ```
 
-Replace `D:/ACode/PowerToolsLocation/uefn-server.mjs` with the real, full path to your own unzipped `uefn-server.mjs`, using forward slashes. The `[mcp_servers.uefn.env]` table is **optional** — omit that entire two-line block if you don't need a non-default bridge directory (it defaults to a per-machine temp directory).
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder, using forward slashes. The `[mcp_servers.uefn.env]` table is **optional** — omit that entire two-line block if you don't need a non-default bridge directory (it defaults to a per-machine temp directory).
 
 **4. Where to launch Codex CLI from.** It does not matter. Because Codex CLI's config is global (step 1), you can launch `codex` from any directory on your machine and it will find the same `~/.codex/config.toml` and the same `uefn` server entry every time.
 
@@ -218,16 +218,16 @@ This is a **verified** integration — confirmed working end to end on a real ma
   "mcpServers": {
     "uefn": {
       "command": "node",
-      "args": ["D:/ACode/PowerToolsLocation/uefn-server.mjs"],
+      "args": ["<POWER_TOOLS_DIR>/uefn-server.mjs"],
       "env": {
-        "UEFN_BRIDGE_DIR": "D:/ACode/PowerToolsLocation/bridge-dir"
+        "UEFN_BRIDGE_DIR": "<POWER_TOOLS_DIR>/bridge-dir"
       }
     }
   }
 }
 ```
 
-Replace `D:/ACode/PowerToolsLocation/uefn-server.mjs` with the real, full path to your own unzipped `uefn-server.mjs`, using forward slashes. The `env` block is optional — remove it entirely if you don't need a non-default bridge directory. Gemini CLI's `env` values also support `$VAR_NAME` expansion, so instead of a literal path you can reference a variable already set in your shell, e.g. `"UEFN_BRIDGE_DIR": "$MY_BRIDGE_DIR"`.
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder, using forward slashes. The `env` block is optional — remove it entirely if you don't need a non-default bridge directory. Gemini CLI's `env` values also support `$VAR_NAME` expansion, so instead of a literal path you can reference a variable already set in your shell, e.g. `"UEFN_BRIDGE_DIR": "$MY_BRIDGE_DIR"`.
 
 **4. Where to launch Gemini CLI from.** If you used the **global** file, it doesn't matter — launch `gemini` from anywhere. If you used the **project-local** file, you must launch `gemini` from your UEFN project root (the folder containing the `.gemini` folder you just created), the same way Claude Code requires.
 
@@ -296,11 +296,11 @@ This repo ships that script at `skills/uefn/verse_lsp_check.py`. Point the serve
 
 ```json
 "env": {
-  "VERSE_LSP_CHECK_SCRIPT": "C:\\path\\to\\trashbyrds-power-tools\\skills\\uefn\\verse_lsp_check.py"
+  "VERSE_LSP_CHECK_SCRIPT": "<POWER_TOOLS_DIR>\\skills\\uefn\\verse_lsp_check.py"
 }
 ```
 
-Add that to whichever client config you're already using from **Connecting an AI client** above (alongside `UEFN_BRIDGE_DIR` if you're setting that too). Without it, `uefn_verse_check` fails with an honest error listing every location it tried — set the variable to the path above and it resolves.
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own Power Tools folder (source clone or unzipped release) — keep the doubled backslashes if you stay on Windows-style paths, since a single backslash is not valid JSON escaping. Add that to whichever client config you're already using from **Connecting an AI client** above (alongside `UEFN_BRIDGE_DIR` if you're setting that too). Without it, `uefn_verse_check` fails with an honest error listing every location it tried — set the variable to the path above and it resolves.
 
 ## 5. Epic's official UEFN MCP server
 
