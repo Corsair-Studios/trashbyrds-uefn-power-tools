@@ -130,13 +130,11 @@ Replace `<POWER_TOOLS_REPO>` with the real, full path to your own clone's locati
 
 If you're using the in-UEFN launcher window (`import pt` → MCP Bridge info), its **Copy config for selected client** button fills in the real, discovered path and command for your install automatically — you don't need to hand-edit the placeholder paths below if you use that button. The walkthroughs below assume you're editing the config file by hand.
 
-**Officially supported clients: Claude Code, Codex CLI, and Gemini CLI.** These three are listed in order of how much testing each has had — Claude Code the most, then Codex CLI, then Gemini CLI — and each gets a full standalone walkthrough below. If you work inside VS Code or Antigravity IDE, note that those are editors, not MCP clients themselves — see **Other MCP clients (community, not tested)** below for what that means for you. Every other client (Cursor, Windsurf, and anything else not listed) is community and untested, covered together in that same section.
+**Officially supported clients: Claude Code, Codex CLI, and Gemini CLI.** Each gets a full standalone walkthrough below. If you work inside VS Code or Antigravity IDE, note that those are editors, not MCP clients themselves — see **Other MCP clients (community, not tested)** below for what that means for you. Every other client (Cursor, Windsurf, and anything else not listed) is community and untested, covered together in that same section.
 
 **A client reporting the server "Connected" is not proof anything is working.** This is repeated in every section below because it is the single most common point of confusion: a "Connected" status in your AI client only means the client successfully launched `node uefn-server.mjs` as a child process. It says nothing about whether the Python bridge inside UEFN has started. You can have a fully "Connected" client, call a tool, and have it fail — because UEFN was never told to start the bridge. The only real proof that everything is working end to end is calling the `uefn_status` tool from inside your client and getting back a real level name and actor count, as described in each section's verification step.
 
 ### Claude Code
-
-This is the most heavily tested client — the one Power Tools is developed against day to day.
 
 **1. Which file, and where.** Claude Code reads its MCP configuration from a file named `.mcp.json`. This file is **project-local**, not global — Claude Code looks for it in the directory you launch Claude Code from, not in your home folder. You must place it at the root of your UEFN project: the same folder that directly contains your project's `.uefnproject` file (the same folder where you created `Content/Python/` in step 1 above).
 
@@ -184,7 +182,7 @@ Do not just run `import init_unreal` on its own if you have already imported it 
 
 ### Codex CLI
 
-This client is well tested, second only to Claude Code — but it has a sharp edge (the sandbox gotcha in step 7) that has caused real confusion, so read this whole section including step 7 before you try it.
+This client has a sharp edge (the sandbox gotcha in step 7) that has caused real confusion, so read this whole section including step 7 before you try it.
 
 **1. Which file, and where.** Codex CLI reads MCP server configuration from exactly one file: `~/.codex/config.toml`. This is a **global** file — it lives in your user home directory, not in your UEFN project. There is no such thing as a project-local Codex config: a `.codex` folder placed anywhere inside your project (including inside `Content/`) is never read by Codex CLI. `~/` means your home directory — on Windows that's `C:/Users/<your-username>` (Codex CLI itself resolves the `~`; you don't need to expand it yourself when editing the file, but if your editor doesn't expand `~` either, use the full path).
 
@@ -224,8 +222,6 @@ This reload form reliably (re)starts the bridge regardless of whether `init_unre
 - Re-run the two-line reload command from step 5 in UEFN's Python console — UEFN must be open with your project loaded.
 
 ### Gemini CLI
-
-This client is tested and working, with less mileage on it than Claude Code or Codex CLI.
 
 **1. Which file, and where.** Gemini CLI supports two locations, and either one works — pick one, don't use both:
 - **Global:** `~/.gemini/settings.json` (in your home directory — on Windows, `C:/Users/<your-username>/.gemini/settings.json`). Use this if you want the `powertools` server available no matter which project you're in.
