@@ -24,6 +24,19 @@ try:
 except ImportError:
     _HAS_TKINTER = False
 
+# Reentrancy guard shared by every Slate tick pump in this module. update()/
+# update_idletasks() can pump events that themselves land back on the tick
+# (e.g. via a nested Slate message loop); this flag blocks a pump from
+# re-entering itself. One flag for the whole module is fine -- these pumps
+# never legitimately run concurrently within a single Python interpreter tick.
+_TICK_PUMP_ACTIVE = [False]
+
+# Consecutive non-TclError exceptions tolerated by a tick pump before it
+# unregisters itself, keyed by tick-handle list id() (each pump owns a
+# distinct one-element list, so id() is stable and unique per pump for its
+# lifetime).
+_TICK_PUMP_MAX_FAILURES = 3
+
 
 # ---------------------------------------------------------------------------
 # Theme constants (matching project palette)
@@ -511,11 +524,15 @@ def _show_mcp_info():
 
     # Tick pump
     _mcp_tick = [None]
+    _mcp_tick_failures = [0]
 
     def _tick(_dt):
+        if _TICK_PUMP_ACTIVE[0]:
+            return
+        _TICK_PUMP_ACTIVE[0] = True
         try:
             if win.winfo_exists():
-                win.update()
+                win.update_idletasks()
             else:
                 if _mcp_tick[0]:
                     unreal.unregister_slate_post_tick_callback(_mcp_tick[0])
@@ -524,8 +541,21 @@ def _show_mcp_info():
             if _mcp_tick[0]:
                 unreal.unregister_slate_post_tick_callback(_mcp_tick[0])
                 _mcp_tick[0] = None
-        except Exception:
-            pass
+        except Exception as e:
+            _mcp_tick_failures[0] += 1
+            unreal.log_warning(
+                "uefn_launcher: MCP info tick pump error ({}/{}): {}".format(
+                    _mcp_tick_failures[0], _TICK_PUMP_MAX_FAILURES, e
+                )
+            )
+            if _mcp_tick_failures[0] >= _TICK_PUMP_MAX_FAILURES and _mcp_tick[0]:
+                unreal.log_warning("uefn_launcher: MCP info tick pump failed too many times, unregistering.")
+                unreal.unregister_slate_post_tick_callback(_mcp_tick[0])
+                _mcp_tick[0] = None
+        else:
+            _mcp_tick_failures[0] = 0
+        finally:
+            _TICK_PUMP_ACTIVE[0] = False
 
     def _on_close():
         if _mcp_tick[0]:
@@ -1746,11 +1776,15 @@ def _show_tag_inspect_window(tag_inspect_module):
     # without this the Entry/Buttons above would never receive events.
     # ------------------------------------------------------------------
     _tag_tick = [None]
+    _tag_tick_failures = [0]
 
     def _tick(_dt):
+        if _TICK_PUMP_ACTIVE[0]:
+            return
+        _TICK_PUMP_ACTIVE[0] = True
         try:
             if win.winfo_exists():
-                win.update()
+                win.update_idletasks()
             else:
                 if _tag_tick[0]:
                     unreal.unregister_slate_post_tick_callback(_tag_tick[0])
@@ -1759,8 +1793,21 @@ def _show_tag_inspect_window(tag_inspect_module):
             if _tag_tick[0]:
                 unreal.unregister_slate_post_tick_callback(_tag_tick[0])
                 _tag_tick[0] = None
-        except Exception:
-            pass
+        except Exception as e:
+            _tag_tick_failures[0] += 1
+            unreal.log_warning(
+                "uefn_launcher: tag inspect tick pump error ({}/{}): {}".format(
+                    _tag_tick_failures[0], _TICK_PUMP_MAX_FAILURES, e
+                )
+            )
+            if _tag_tick_failures[0] >= _TICK_PUMP_MAX_FAILURES and _tag_tick[0]:
+                unreal.log_warning("uefn_launcher: tag inspect tick pump failed too many times, unregistering.")
+                unreal.unregister_slate_post_tick_callback(_tag_tick[0])
+                _tag_tick[0] = None
+        else:
+            _tag_tick_failures[0] = 0
+        finally:
+            _TICK_PUMP_ACTIVE[0] = False
 
     def _on_close():
         if _tag_tick[0]:
@@ -2149,15 +2196,34 @@ def show_launcher():
     # Tick callback -- pump tkinter from the Unreal event loop
     # ==================================================================
     _tick_handle = [None]
+    _tick_pump_failures = [0]
 
     def _tick_pump(delta_time):
+        if _TICK_PUMP_ACTIVE[0]:
+            return
+        _TICK_PUMP_ACTIVE[0] = True
         try:
-            root.update()
+            root.update_idletasks()
         except tk.TclError:
             # Window was closed -- unregister the tick callback
             if _tick_handle[0] is not None:
                 unreal.unregister_slate_post_tick_callback(_tick_handle[0])
                 _tick_handle[0] = None
+        except Exception as e:
+            _tick_pump_failures[0] += 1
+            unreal.log_warning(
+                "uefn_launcher: launcher hub tick pump error ({}/{}): {}".format(
+                    _tick_pump_failures[0], _TICK_PUMP_MAX_FAILURES, e
+                )
+            )
+            if _tick_pump_failures[0] >= _TICK_PUMP_MAX_FAILURES and _tick_handle[0] is not None:
+                unreal.log_warning("uefn_launcher: launcher hub tick pump failed too many times, unregistering.")
+                unreal.unregister_slate_post_tick_callback(_tick_handle[0])
+                _tick_handle[0] = None
+        else:
+            _tick_pump_failures[0] = 0
+        finally:
+            _TICK_PUMP_ACTIVE[0] = False
 
     _tick_handle[0] = unreal.register_slate_post_tick_callback(_tick_pump)
 

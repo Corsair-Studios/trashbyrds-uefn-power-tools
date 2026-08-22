@@ -216,6 +216,13 @@ _bridge_dir = None         # resolved IPC directory path
 _last_poll_time = 0.0      # monotonic time of last command poll
 _last_heartbeat_time = 0.0 # monotonic time of last heartbeat write
 
+_TICK_ACTIVE = False        # reentrancy guard -- blocks _tick from running
+                             # inside a nested Slate tick re-entry
+_TICK_MAX_FAILURES = 3       # consecutive unexpected _tick exceptions
+                             # tolerated before the tick unregisters itself
+_tick_failure_count = 0     # consecutive unexpected _tick exceptions so far,
+                             # reset to 0 on any tick that completes cleanly
+
 # Session token — a cheap partial mitigation against a stale/unrelated MCP
 # server (e.g. from a previous session, or another user on a shared temp
 # dir) sending commands into this bridge instance. NOT full auth: the temp
@@ -2030,41 +2037,66 @@ def _cleanup_orphan_responses():
 def _tick(delta_time):
     """Slate post-tick callback.  Polls for commands and writes heartbeats."""
     global _last_poll_time, _last_heartbeat_time, _poll_count
+    global _TICK_ACTIVE, _tick_failure_count
 
-    now = time.monotonic()
+    # Reentrancy guard -- _tick does file IPC only (no Tk), but guard it
+    # anyway in case a future callee re-enters the Slate tick.
+    if _TICK_ACTIVE:
+        return
+    _TICK_ACTIVE = True
+    try:
+        now = time.monotonic()
 
-    # Poll for commands at _POLL_INTERVAL
-    if now - _last_poll_time >= _POLL_INTERVAL:
-        _last_poll_time = now
-        _poll_count += 1
-        try:
-            _process_command()
-        except Exception:
-            unreal.log_warning(
-                "uefn_bridge: Tick error in _process_command:\n"
-                + traceback.format_exc()
-            )
-
-        # Cheap orphan-response sweep — see _cleanup_orphan_responses.
-        if _poll_count % _ORPHAN_CLEANUP_EVERY_N_POLLS == 0:
+        # Poll for commands at _POLL_INTERVAL
+        if now - _last_poll_time >= _POLL_INTERVAL:
+            _last_poll_time = now
+            _poll_count += 1
             try:
-                _cleanup_orphan_responses()
+                _process_command()
             except Exception:
                 unreal.log_warning(
-                    "uefn_bridge: Tick error in _cleanup_orphan_responses:\n"
+                    "uefn_bridge: Tick error in _process_command:\n"
                     + traceback.format_exc()
                 )
 
-    # Write heartbeat at _HEARTBEAT_INTERVAL
-    if now - _last_heartbeat_time >= _HEARTBEAT_INTERVAL:
-        _last_heartbeat_time = now
-        try:
-            _write_heartbeat()
-        except Exception:
-            unreal.log_warning(
-                "uefn_bridge: Tick error in _write_heartbeat:\n"
-                + traceback.format_exc()
+            # Cheap orphan-response sweep — see _cleanup_orphan_responses.
+            if _poll_count % _ORPHAN_CLEANUP_EVERY_N_POLLS == 0:
+                try:
+                    _cleanup_orphan_responses()
+                except Exception:
+                    unreal.log_warning(
+                        "uefn_bridge: Tick error in _cleanup_orphan_responses:\n"
+                        + traceback.format_exc()
+                    )
+
+        # Write heartbeat at _HEARTBEAT_INTERVAL
+        if now - _last_heartbeat_time >= _HEARTBEAT_INTERVAL:
+            _last_heartbeat_time = now
+            try:
+                _write_heartbeat()
+            except Exception:
+                unreal.log_warning(
+                    "uefn_bridge: Tick error in _write_heartbeat:\n"
+                    + traceback.format_exc()
+                )
+    except Exception as e:
+        # Catch-all for anything not already handled by the per-section
+        # try/except blocks above (e.g. an error in the interval math
+        # itself). Unregister after too many consecutive failures so a
+        # persistently broken tick stops instead of erroring every frame.
+        _tick_failure_count += 1
+        unreal.log_warning(
+            "uefn_bridge: Tick error ({}/{}): {}".format(
+                _tick_failure_count, _TICK_MAX_FAILURES, e
             )
+        )
+        if _tick_failure_count >= _TICK_MAX_FAILURES and _tick_handle is not None:
+            unreal.log_warning("uefn_bridge: Tick failed too many times, unregistering.")
+            stop_bridge()
+    else:
+        _tick_failure_count = 0
+    finally:
+        _TICK_ACTIVE = False
 
 
 # ---------------------------------------------------------------------------
