@@ -116,12 +116,12 @@ This is the **verified** integration — confirmed working end to end on a real 
 
 **2. Create the directory first?** No new directory is needed — `.mcp.json` is a single file that goes directly in your UEFN project root, alongside (not inside) the `Content` folder.
 
-**3. Full file content.** Create a file named exactly `.mcp.json` (note the leading dot, and no other file extension) in your UEFN project root, with this complete content:
+**3. Full file content.** Create a file named exactly `.mcp.json` (note the leading dot, and no other file extension) in your UEFN project root with this content if the file doesn't exist yet, or merge the `powertools` entry into the existing `mcpServers` object if `.mcp.json` already exists, preserving any servers already there:
 
 ```json
 {
   "mcpServers": {
-    "uefn": {
+    "powertools": {
       "command": "node",
       "args": ["<POWER_TOOLS_DIR>/uefn-server.mjs"],
       "env": {
@@ -134,7 +134,7 @@ This is the **verified** integration — confirmed working end to end on a real 
 
 Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder. The `env` block is **optional** — if you don't need a non-default bridge directory, delete the entire `"env": { ... }` block (including its comma on the line above it) and just leave `"command"` and `"args"`.
 
-**4. Where to launch Claude Code from.** This is the step people get wrong. Claude Code only reads `.mcp.json` from the directory you **launch it in** — not from any other folder, and not recursively from parent folders. You must open your terminal (or your editor's integrated terminal) in your UEFN project root — the exact folder where you just created `.mcp.json` — and start Claude Code from there. If you launch Claude Code from your home directory, your Desktop, or any other folder, it will not find this `.mcp.json` and the `uefn` server will not appear at all.
+**4. Where to launch Claude Code from.** This is the step people get wrong. Claude Code only reads `.mcp.json` from the directory you **launch it in** — not from any other folder, and not recursively from parent folders. You must open your terminal (or your editor's integrated terminal) in your UEFN project root — the exact folder where you just created `.mcp.json` — and start Claude Code from there. If you launch Claude Code from your home directory, your Desktop, or any other folder, it will not find this `.mcp.json` and the `powertools` server will not appear at all.
 
 **5. In UEFN's Python console, in order.** With your UEFN project open, open the Python console (Output Log panel → console dropdown → **Python**) and run these two lines, in this order:
 
@@ -147,7 +147,7 @@ Do not just run `import init_unreal` on its own if you have already imported it 
 
 **6. Verify it worked.** In Claude Code, ask it to call the `uefn_status` tool (or just ask "check the UEFN bridge status"). A real, working connection returns a specific level name and an actor count greater than zero. If you get an error, a generic "unreachable" message, or no level name, the bridge is not actually running even if Claude Code's own connection indicator looks fine — go back to step 5.
 
-**Claude Code showing the `uefn` server as "Connected" is not proof anything is working.** A "Connected" status in Claude Code only means Claude Code successfully launched `node uefn-server.mjs` as a child process — it says nothing about whether the Python bridge inside UEFN has started. You can have a fully "Connected" server in Claude Code, call a tool, and have it fail, or you can have Claude Code report "Connected" while the Power Tools launcher window shows "Bridge disconnected" and no heartbeat file exists at all. The only trustworthy check is calling the `uefn_status` tool from Claude Code and getting back a real level name and an actor count greater than zero, as described above — trust that result over Claude Code's own connection indicator.
+**Claude Code showing the `powertools` server as "Connected" is not proof anything is working.** A "Connected" status in Claude Code only means Claude Code successfully launched `node uefn-server.mjs` as a child process — it says nothing about whether the Python bridge inside UEFN has started. You can have a fully "Connected" server in Claude Code, call a tool, and have it fail, or you can have Claude Code report "Connected" while the Power Tools launcher window shows "Bridge disconnected" and no heartbeat file exists at all. The only trustworthy check is calling the `uefn_status` tool from Claude Code and getting back a real level name and an actor count greater than zero, as described above — trust that result over Claude Code's own connection indicator.
 
 **7. If it doesn't work:**
 - Double-check you launched Claude Code from the exact folder containing `.mcp.json` — this is the most common mistake.
@@ -167,17 +167,17 @@ This is a **verified** integration — confirmed working end to end on a real ma
 **3. Full file content.** Inside `~/.codex/config.toml`, add this complete table (if the file already has other content in it from other MCP servers or settings, add this table without disturbing what's already there):
 
 ```toml
-[mcp_servers.uefn]
+[mcp_servers.powertools]
 command = "node"
 args = ["<POWER_TOOLS_DIR>/uefn-server.mjs"]
 
-[mcp_servers.uefn.env]
+[mcp_servers.powertools.env]
 UEFN_BRIDGE_DIR = "<POWER_TOOLS_DIR>/bridge-dir"
 ```
 
-Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder, using forward slashes. The `[mcp_servers.uefn.env]` table is **optional** — omit that entire two-line block if you don't need a non-default bridge directory (it defaults to a per-machine temp directory).
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder, using forward slashes. The `[mcp_servers.powertools.env]` table is **optional** — omit that entire two-line block if you don't need a non-default bridge directory (it defaults to a per-machine temp directory).
 
-**4. Where to launch Codex CLI from.** It does not matter. Because Codex CLI's config is global (step 1), you can launch `codex` from any directory on your machine and it will find the same `~/.codex/config.toml` and the same `uefn` server entry every time.
+**4. Where to launch Codex CLI from.** It does not matter. Because Codex CLI's config is global (step 1), you can launch `codex` from any directory on your machine and it will find the same `~/.codex/config.toml` and the same `powertools` server entry every time.
 
 **5. In UEFN's Python console, in order.** With your UEFN project open, open the Python console (Output Log panel → console dropdown → **Python**) and run these two lines, in this order:
 
@@ -193,7 +193,7 @@ This reload form reliably (re)starts the bridge regardless of whether `init_unre
 **7. If it doesn't work:**
 - **The sandbox gotcha (read this first):** Codex CLI's default `sandbox_mode = "read-only"` auto-denies the very first MCP tool call in `codex exec` — instantly, before it ever reaches the server — with a message like `"user cancelled MCP tool call"`. That message reads exactly as if a human rejected the call, but no human did anything; the sandbox blocked it automatically. If your first `uefn_status` call fails with that message, this is almost certainly the cause, not a broken server or bridge. Fix it by either running Codex CLI interactively so you can approve the tool call when prompted, or by starting Codex with the sandbox opened (not read-only), so `uefn_*` calls are allowed through.
 - Confirm you edited `~/.codex/config.toml` and not some other file — there is no project-local alternative, so a project-local `.codex` folder anywhere will silently do nothing.
-- Confirm the TOML syntax is valid — table headers (`[mcp_servers.uefn]`) must appear before the keys that belong to them, and string values need double quotes.
+- Confirm the TOML syntax is valid — table headers (`[mcp_servers.powertools]`) must appear before the keys that belong to them, and string values need double quotes.
 - Confirm the path in `args` points at a real, existing `uefn-server.mjs`, with forward slashes.
 - Re-run the two-line reload command from step 5 in UEFN's Python console — UEFN must be open with your project loaded.
 
@@ -202,8 +202,8 @@ This reload form reliably (re)starts the bridge regardless of whether `init_unre
 This is a **verified** integration — confirmed working end to end on a real machine.
 
 **1. Which file, and where.** Gemini CLI supports two locations, and either one works — pick one, don't use both:
-- **Global:** `~/.gemini/settings.json` (in your home directory — on Windows, `C:/Users/<your-username>/.gemini/settings.json`). Use this if you want the `uefn` server available no matter which project you're in.
-- **Project-local:** `.gemini/settings.json` inside your UEFN project root (the folder holding your `.uefnproject` file). Use this if you only want the `uefn` server available for this specific project.
+- **Global:** `~/.gemini/settings.json` (in your home directory — on Windows, `C:/Users/<your-username>/.gemini/settings.json`). Use this if you want the `powertools` server available no matter which project you're in.
+- **Project-local:** `.gemini/settings.json` inside your UEFN project root (the folder holding your `.uefnproject` file). Use this if you only want the `powertools` server available for this specific project.
 
 **2. Create the directory first?** Whichever location you pick, the `.gemini` folder likely doesn't exist yet. Create it before creating the file inside it:
 - For the global option, create a folder named `.gemini` directly inside your user home directory.
@@ -214,7 +214,7 @@ This is a **verified** integration — confirmed working end to end on a real ma
 ```json
 {
   "mcpServers": {
-    "uefn": {
+    "powertools": {
       "command": "node",
       "args": ["<POWER_TOOLS_DIR>/uefn-server.mjs"],
       "env": {
@@ -253,7 +253,7 @@ This reliably (re)starts the bridge even if `init_unreal` was already imported e
 
 **Using VS Code or Antigravity IDE? You probably don't need this section.** VS Code and Antigravity IDE are editors — they are hosts you run a terminal inside, not MCP clients in their own right. If you're using either one, the normal path is to open its integrated terminal and run Claude Code, Codex CLI, or Gemini CLI there, then follow that CLI's section above exactly as written. The editor itself needs no separate MCP setup; only the CLI running inside it does. The VS Code Copilot agent-mode and Antigravity-native config entries below exist only for people who specifically want the editor's own built-in agent (not a CLI in its terminal) to talk to the bridge, which is the untested path.
 
-Every client below uses the same config **shape** as the Claude Code section above: a `command` of `node`, an `args` array pointing at your `uefn-server.mjs`, and an optional `env` block for `UEFN_BRIDGE_DIR` (see the Claude Code section's `.mcp.json` example for the full JSON to copy and adapt). What differs per client is only the file location and, in one case, the top-level key name:
+Every client below uses the same config **shape** as the Claude Code section above: a `command` of `node`, an `args` array pointing at your `uefn-server.mjs`, and an optional `env` block for `UEFN_BRIDGE_DIR` (see the Claude Code section's `.mcp.json` example for the full JSON to copy and adapt — name the server entry `powertools`, same as that example). What differs per client is only the file location and, in one case, the top-level key name:
 
 | Client | Config file | Key |
 | --- | --- | --- |
@@ -303,6 +303,8 @@ Replace `<POWER_TOOLS_DIR>` with the real, full path to your own Power Tools fol
 ## 5. Epic's official UEFN MCP server
 
 Epic ships its own official UEFN MCP server. Enable it in UEFN via **Project Settings → Python Editor Scripting** and **Project Settings → UEFN MCP Toolsets**; once enabled it binds `http://127.0.0.1:8000/mcp` by default. You can install and run both Epic's server and Power Tools at the same time — that's the intended configuration, not a conflict. See Epic's own documentation for what its server covers: https://dev.epicgames.com/documentation/fortnite/uefn-mcp
+
+Power Tools registers under the server key `powertools`, specifically so it sits alongside Epic's own server entry in your client config instead of overwriting it. If you configured Power Tools under a different key in an older setup, double-check it isn't the same key Epic's server uses in that same config file.
 
 Power Tools (this server) focuses on bulk queries over a project's actors, plus moderation, dependency, texture, material, and Niagara-usage scanning.
 
