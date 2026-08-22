@@ -6,7 +6,7 @@ An MCP server and in-editor Python bridge for live, chat-driven inspection and e
 
 > **Not affiliated with Epic Games.** Power Tools is an independent, community-built project. It is not endorsed by, supported by, or affiliated with Epic Games in any way. Fortnite and UEFN are trademarks of Epic Games, Inc.
 
-> **Beta software.** Power Tools has been thoroughly tested with Claude Code. Support for other MCP clients (Gemini CLI, Codex CLI, Cursor, Windsurf, and the others listed in [INSTALL.md](INSTALL.md)) should be considered experimental — those integrations have not been well tested yet.
+> **Beta software.** Power Tools has been tested with Claude Code, Codex CLI, and Gemini CLI, in that order of depth — Claude Code the most, Gemini CLI the least. Support for other MCP clients (Cursor, Windsurf, and the others listed in [INSTALL.md](INSTALL.md)) has not yet been exercised.
 
 ## Use at your own risk
 
