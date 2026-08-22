@@ -211,13 +211,13 @@ _HEARTBEAT_INTERVAL = 5.0  # seconds between heartbeat writes
 # Module-level state
 # ---------------------------------------------------------------------------
 
-_tick_handle = None        # slate tick callback handle
+_tick_handle = None        # ticker callback handle
 _bridge_dir = None         # resolved IPC directory path
 _last_poll_time = 0.0      # monotonic time of last command poll
 _last_heartbeat_time = 0.0 # monotonic time of last heartbeat write
 
 _TICK_ACTIVE = False        # reentrancy guard -- blocks _tick from running
-                             # inside a nested Slate tick re-entry
+                             # inside a nested tick re-entry
 _TICK_MAX_FAILURES = 3       # consecutive unexpected _tick exceptions
                              # tolerated before the tick unregisters itself
 _tick_failure_count = 0     # consecutive unexpected _tick exceptions so far,
@@ -2034,15 +2034,29 @@ def _cleanup_orphan_responses():
 # Tick callback
 # ---------------------------------------------------------------------------
 
-def _tick(delta_time):
-    """Slate post-tick callback.  Polls for commands and writes heartbeats."""
+def _tick(delta_seconds=0.0):
+    """Ticker callback.  Polls for commands and writes heartbeats.
+
+    Registered via unreal.register_ticker_callback rather than
+    register_slate_post_tick_callback: the bridge does file IPC only, it
+    never needed Slate widget timing, and a Slate teardown (e.g. during a
+    content-sync world reload) can tear down Slate while this callback is
+    still registered, faulting when it fires against freed Slate/world
+    state. A ticker callback isn't tied to Slate's widget lifetime, so a
+    Slate teardown can't pull the rug out from under it.
+    #
+    # The exact ticker callback signature wasn't verifiable offline (the
+    # Slate post-tick variant passes delta_time; the ticker variant may or
+    # may not). Default the parameter so a signature mismatch (called with
+    # zero args or a different positional arg) can't raise on every tick.
+    """
     global _last_poll_time, _last_heartbeat_time, _poll_count
     global _TICK_ACTIVE, _tick_failure_count
 
     # Reentrancy guard -- _tick does file IPC only (no Tk), but guard it
-    # anyway in case a future callee re-enters the Slate tick.
+    # anyway in case a future callee re-enters the tick.
     if _TICK_ACTIVE:
-        return
+        return True
     _TICK_ACTIVE = True
     try:
         now = time.monotonic()
@@ -2098,6 +2112,16 @@ def _tick(delta_time):
     finally:
         _TICK_ACTIVE = False
 
+    # Some ticker APIs expect the callback to return True to keep repeating
+    # and False (or None) to stop -- this was not verifiable offline, so
+    # return True explicitly on every path that reaches here (including the
+    # too-many-failures path, which unregisters via stop_bridge() anyway;
+    # any tick that still fires after that is a no-op via the None handle
+    # guard in stop_bridge/start_bridge). Returning True is harmless if the
+    # return value is ignored; returning nothing would silently stop a
+    # repeating ticker.
+    return True
+
 
 # ---------------------------------------------------------------------------
 # Start / Stop
@@ -2119,7 +2143,10 @@ def start_bridge():
     _last_heartbeat_time = 0.0  # write heartbeat immediately on start
     _poll_count = 0
 
-    _tick_handle = unreal.register_slate_post_tick_callback(_tick)
+    # register_ticker_callback, not register_slate_post_tick_callback: see
+    # the _tick docstring for why (Slate teardown during a content-sync
+    # world reload can fault a still-registered Slate tick callback).
+    _tick_handle = unreal.register_ticker_callback(_tick)
 
     unreal.log("uefn_bridge: Bridge started.  IPC dir: " + _bridge_dir)
     unreal.log(
@@ -2136,7 +2163,7 @@ def stop_bridge():
         unreal.log("uefn_bridge: Bridge is not running.")
         return
 
-    unreal.unregister_slate_post_tick_callback(_tick_handle)
+    unreal.unregister_ticker_callback(_tick_handle)
     _tick_handle = None
 
     # Write a final "stopped" heartbeat
@@ -2157,7 +2184,7 @@ def stop_bridge():
 # Unregister any orphaned tick from a previous module load before starting fresh.
 if _old_tick_handle is not None:
     try:
-        unreal.unregister_slate_post_tick_callback(_old_tick_handle)
+        unreal.unregister_ticker_callback(_old_tick_handle)
     except Exception:
         pass
 del _old_tick_handle
