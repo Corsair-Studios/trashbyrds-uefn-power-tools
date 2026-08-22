@@ -7,6 +7,25 @@
 - **Node.js 18+** on the machine running the MCP server.
 - An MCP-capable client (e.g. Claude Code) to talk to the server.
 
+## Installing with an AI assistant
+
+If you're running Claude Code, Codex CLI, Gemini CLI, Cursor, or a similar assistant with filesystem access, you can point it at this file and have it do the install with you rather than copy-pasting each step by hand. It reads your existing MCP config, merges the `powertools` entry in without disturbing anything already there, and fills in the real absolute path instead of leaving a placeholder in the file. It will ask before it changes any file.
+
+Paste this into your assistant:
+
+```
+Read the INSTALL.md at <path-to-this-file> in the Power Tools repo. Figure out which MCP client I'm using and find its config file. Read that config file first. Propose a merged version that adds the powertools server entry while preserving every server already listed in it — use the real absolute path to my unpacked Power Tools folder, not a placeholder. Show me the exact change before writing anything, and wait for my approval. Also handle the separate step of copying python/ into my UEFN project's Content/Python.
+```
+
+**What the assistant needs to get right:**
+- The server key is `powertools`, chosen so it doesn't collide with Epic's official UEFN MCP server, which commonly uses `uefn` as its key.
+- The config shape differs per client — JSON with an `mcpServers` object, TOML `[mcp_servers.X]` tables, or VS Code's `servers` key. The per-client sections under **Connecting an AI client** below are authoritative for the exact shape and location.
+- `<POWER_TOOLS_DIR>` in every example in this file means the absolute path to the folder holding `uefn-server.mjs`. It must be replaced with a real path, and that folder needs to be a permanent location, not one that will move or get deleted.
+- Config files must be merged, never replaced — an existing config can already list other MCP servers, and overwriting the file instead of merging into it silently deletes them.
+- Copying the Python bridge (`python/` into the UEFN project's `Content/Python`) and configuring the MCP client are two separate steps. Both are required; doing only one leaves the install incomplete.
+
+**What it cannot do for you.** An assistant editing config files cannot verify the bridge is actually running inside UEFN. That check requires UEFN open with your project loaded, running `import init_unreal` in UEFN's Python console (UEFN does not auto-run third-party `init_unreal.py` on its own), and confirming a fresh `heartbeat.json` appears in the bridge's IPC directory. See **[3. How it connects](#3-how-it-connects)** below for what a working versus non-working bridge looks like and why a client's own "Connected" status isn't proof either way.
+
 ## 1. Install the Python bridge into your UEFN project
 
 Copy the **contents** of this repo's `python/` folder into your UEFN project's `Content/Python/` directory.
