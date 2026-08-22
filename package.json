@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "tsx uefn-server.ts",
-    "build": "esbuild uefn-server.ts --bundle --platform=node --format=esm --target=node18 --outfile=uefn-server.mjs"
+    "build": "esbuild uefn-server.ts --bundle --platform=node --format=esm --target=node18 --outfile=uefn-server.mjs",
+    "sync:project": "node scripts/sync-to-project.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
