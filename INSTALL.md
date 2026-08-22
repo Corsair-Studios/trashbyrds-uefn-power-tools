@@ -14,7 +14,7 @@ If you're running Claude Code, Codex CLI, Gemini CLI, Cursor, or a similar assis
 Paste this into your assistant:
 
 ```
-Read the INSTALL.md at <path-to-this-file> in the Power Tools repo. Figure out which MCP client I'm using and find its config file. Read that config file first. Propose a merged version that adds the powertools server entry while preserving every server already listed in it — use the real absolute path to my unpacked Power Tools folder, not a placeholder. Show me the exact change before writing anything, and wait for my approval. Also handle the separate step of copying python/ into my UEFN project's Content/Python.
+Read the INSTALL.md at <path-to-this-file> in the Power Tools repo. If I haven't already downloaded and unpacked a release, do that first, verify the unpack landed correctly, and ask me where to put the folder permanently. Then figure out which MCP client I'm using and find its config file. Read that config file first. Propose a merged version that adds the powertools server entry while preserving every server already listed in it — use the real absolute path to my unpacked Power Tools folder, not a placeholder. Show me the exact change before writing anything, and wait for my approval. Also handle the separate step of copying python/ into my UEFN project's Content/Python.
 ```
 
 **What the assistant needs to get right:**
@@ -23,6 +23,13 @@ Read the INSTALL.md at <path-to-this-file> in the Power Tools repo. Figure out w
 - `<POWER_TOOLS_DIR>` in every example in this file means the absolute path to the folder holding `uefn-server.mjs`. It must be replaced with a real path, and that folder needs to be a permanent location, not one that will move or get deleted.
 - Config files must be merged, never replaced — an existing config can already list other MCP servers, and overwriting the file instead of merging into it silently deletes them.
 - Copying the Python bridge (`python/` into the UEFN project's `Content/Python`) and configuring the MCP client are two separate steps. Both are required; doing only one leaves the install incomplete.
+
+**If it's also fetching the release, these facts matter:**
+- The canonical source is `https://github.com/Corsair-Studios/trashbyrds-uefn-power-tools`, and releases live on that repo's Releases page. Anything else is not this project — a fork or mirror may not contain the same code.
+- The release asset to use is the zip named `trashbyrds-power-tools-<version>.zip` (for example `trashbyrds-power-tools-0.1.3.zip`). A bare `uefn-server.mjs` asset is also published for anyone who only wants the server file. GitHub's auto-generated "Source code (zip)" is not the release artifact and does not contain a built `uefn-server.mjs`.
+- A correct unpack puts `uefn-server.mjs`, `package.json`, `python/`, `skills/`, and the LICENSE/README/INSTALL files at the top level of the chosen folder. If those sit one directory deeper, the archive was unpacked into a nested folder and every configured path will be wrong.
+- Verification after unpacking: `uefn-server.mjs` exists at the top level, and the `version` field in `package.json` matches the release tag that was downloaded (tag `v0.1.3` corresponds to version `0.1.3`). A mismatch means the wrong artifact was used.
+- The destination folder needs to be permanent — not Downloads, not a temp folder, not a location a cleanup or reinstall would remove — because the client config hard-codes the absolute path to `uefn-server.mjs`. Moving the folder later breaks the config until the path is updated.
 
 **What it cannot do for you.** An assistant editing config files cannot verify the bridge is actually running inside UEFN. That check requires UEFN open with your project loaded, running `import init_unreal` in UEFN's Python console (UEFN does not auto-run third-party `init_unreal.py` on its own), and confirming a fresh `heartbeat.json` appears in the bridge's IPC directory. See **[3. How it connects](#3-how-it-connects)** below for what a working versus non-working bridge looks like and why a client's own "Connected" status isn't proof either way.
 
