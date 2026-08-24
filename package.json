@@ -10,7 +10,8 @@
   "scripts": {
     "start": "tsx uefn-server.ts",
     "build": "esbuild uefn-server.ts --bundle --platform=node --format=esm --target=node18 --outfile=uefn-server.mjs",
-    "sync:project": "node scripts/sync-to-project.mjs"
+    "sync:project": "node scripts/sync-to-project.mjs",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
