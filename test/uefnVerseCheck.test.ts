@@ -2,7 +2,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, mkdirSync, copyFileSync, rmSync, chmodSync } from 'node:fs';
 import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -215,15 +215,26 @@ export {
 // with no `shell: true` — on Windows, Node's own child_process PATH search
 // for a bare command name only resolves real Win32 executables (.exe), not
 // .cmd/.bat batch-file shims, when spawned this way. So the fake interpreter
-// has to be a genuine executable: a copy of the CURRENT node.exe renamed to
-// python.exe. node.exe ignores the file extension of a script argv and runs
-// it as JS regardless, so the ".py" fixture "scripts" below are plain JS —
-// this is what drives every subprocess-shaped test deterministically, with
-// no real Python, no real verse-lsp.exe, and no network. Built once and
-// reused (copying node.exe per-test would be wasteful); cleaned up in
-// `after()`.
+// has to be a genuine executable: a copy of the CURRENT node binary. The
+// node binary ignores the file extension of a script argv and runs it as JS
+// regardless, so the ".py" fixture "scripts" below are plain JS — this is
+// what drives every subprocess-shaped test deterministically, with no real
+// Python, no real verse-lsp.exe, and no network. Built once and reused
+// (copying the binary per-test would be wasteful); cleaned up in `after()`.
+//
+// The fake's NAME is platform-dependent, and getting it wrong is silent and
+// nasty: on Windows it must be `python.exe` (the PATH search appends .exe to
+// the bare probe name), but on POSIX it must be exactly `python` — a file
+// named python.exe there matches NO probe name, so the probe walks past the
+// fixture to the RUNNER'S REAL python3, which then executes the JS fixture
+// scripts as Python and every subprocess test fails with nonsense. That is
+// precisely how the whole suite passed on Windows for weeks and then failed
+// its first run on ubuntu-latest CI. copyFileSync also does not carry the
+// execute bit on POSIX, hence the chmod.
 const FAKE_PY_DIR = mkdtempSync(join(tmpdir(), 'uefn-verse-check-fakepy-'));
-copyFileSync(process.execPath, join(FAKE_PY_DIR, 'python.exe'));
+const FAKE_PY_NAME = process.platform === 'win32' ? 'python.exe' : 'python';
+copyFileSync(process.execPath, join(FAKE_PY_DIR, FAKE_PY_NAME));
+chmodSync(join(FAKE_PY_DIR, FAKE_PY_NAME), 0o755);
 
 after(() => {
   rmSync(FAKE_PY_DIR, { recursive: true, force: true });
