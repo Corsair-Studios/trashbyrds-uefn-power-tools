@@ -31,7 +31,7 @@ Read the INSTALL.md at https://github.com/Corsair-Studios/trashbyrds-uefn-power-
 - Verification after unpacking: `uefn-server.mjs` exists at the top level, and the `version` field in `package.json` matches the release tag that was downloaded (tag `v0.1.3` corresponds to version `0.1.3`). A mismatch means the wrong artifact was used.
 - The destination folder needs to be permanent — not Downloads, not a temp folder, not a location a cleanup or reinstall would remove — because the client config hard-codes the absolute path to `uefn-server.mjs`. Moving the folder later breaks the config until the path is updated.
 
-**What it cannot do for you.** An assistant editing config files cannot verify the bridge is actually running inside UEFN. That check requires UEFN open with your project loaded, running `import init_unreal` in UEFN's Python console (UEFN does auto-run `init_unreal.py` as a startup script when the project has Python enabled — but only at editor startup, so a project that was already open, or one where Python was enabled or the files were copied in mid-session, still needs the manual run), and confirming a fresh `heartbeat.json` appears in the bridge's IPC directory. See **[3. How it connects](#3-how-it-connects)** below for what a working versus non-working bridge looks like and why a client's own "Connected" status isn't proof either way.
+**What it cannot do for you.** An assistant editing config files cannot verify the bridge is actually running inside UEFN. That check requires UEFN open with your project loaded, running `import init_unreal` or `import pt` in UEFN's Python console (UEFN auto-runs a project's `init_unreal.py` only if the project is already mounted when Python initializes — and with Epic's MCP server set to auto-start, Python now initializes at editor boot, before any project is open, so in practice the auto-run rarely fires and the manual run is the normal path; `import pt` performs it for you if it hasn't happened), and confirming a fresh `heartbeat.json` appears in the bridge's IPC directory. See **[3. How it connects](#3-how-it-connects)** below for what a working versus non-working bridge looks like and why a client's own "Connected" status isn't proof either way.
 
 ## 1. Install the Python bridge into your UEFN project
 
@@ -131,14 +131,18 @@ Once `python/` is in place (step 1), Power Tools also registers itself with UEFN
 
 **Requirements:** **Python Editor Scripting** enabled for the project (the same setting Epic's own MCP server needs), and a UEFN build that ships the Toolset Registry.
 
-**How to tell it worked.** After UEFN loads your project, the Output Log shows one of:
+**When it runs.** Registration happens when `init_unreal.py` runs — and UEFN only auto-runs that if the project is already mounted when Python initializes, which in practice it usually is not (with Epic's MCP server set to auto-start, Python initializes at editor boot, before any project is open). So after opening your project, run `import pt` (or `import init_unreal`) in the Python console once per session — `import pt` bootstraps everything and opens the launcher in one step.
+
+**How to tell it worked.** The Output Log shows one of:
 
 ```
 Trashbyrd: native UEFN toolsets registered
 Trashbyrd: native UEFN toolsets unavailable this session (Toolset Registry not present) — MCP bridge unaffected
 ```
 
-The second line is not an error — it means this UEFN build has no Toolset Registry, and everything else about Power Tools works as before.
+The second line is not an error — it means this UEFN build has no Toolset Registry, and everything else about Power Tools works as before. If **neither** line appears, `init_unreal.py` has not run this session at all — run `import pt` in the Python console.
+
+**Where the tools appear — and where they don't.** These toolsets register with UEFN's **Toolset Registry** and surface through UEFN's own AI assistant. They do **not** appear on the **Editor Preferences → Plugins → MCP Toolset Servers** page — that page only lists outbound server connections you add there yourself (see the optional section under **[5. Epic's official UEFN MCP server](#5-epics-official-uefn-mcp-server)**), and it starts with one blank placeholder entry that belongs to no one.
 
 **What gets registered.** Three toolsets, 29 tools, each returning JSON:
 
