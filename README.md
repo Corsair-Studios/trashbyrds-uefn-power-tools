@@ -35,9 +35,9 @@ Epic ships its own official UEFN MCP server, and you can run Power Tools alongsi
 
 ## What's in the box
 
-### Native UEFN toolsets (29 tools, no Node required)
+### Native UEFN toolsets (30 tools, no Node required)
 
-Copying `python/` into your project and running `import pt` registers three toolsets — `PowerToolsInspect`, `PowerToolsScan`, `PowerToolsEdit` — with UEFN's own Toolset Registry, alongside Epic's built-in toolsets. UEFN's assistant can call them directly, and they are discoverable through Epic's official MCP server's tool search. See [INSTALL.md](INSTALL.md#1b-native-uefn-toolsets-no-node-no-config-file).
+Copying `python/` into your project and running `import pt` registers three toolsets — `PowerToolsInspect`, `PowerToolsScan`, `PowerToolsEdit` — with UEFN's own Toolset Registry, alongside Epic's built-in toolsets. UEFN's assistant can call them directly, and they are discoverable through Epic's official MCP server's tool search. This includes Verse compiler diagnostics (`verse_check`), which runs the same headless language-server check as `uefn_verse_check` with no Node involved. See [INSTALL.md](INSTALL.md#1b-native-uefn-toolsets-no-node-no-config-file).
 
 ### MCP tools (30)
 

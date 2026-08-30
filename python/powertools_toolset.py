@@ -120,6 +120,180 @@ def _call(method, params):
         })
 
 
+_VERSE_EXIT_TIERS = {
+    0: "clean",
+    1: "diagnostics_found",
+    2: "usage_error",
+    3: "precondition_failed",
+    4: "target_not_analyzed",
+}
+
+
+def _find_verse_check_script():
+    """Locate verse_lsp_check.py for the native tool.
+
+    The copy beside THIS file wins: python/verse_lsp_check.py ships into
+    Content/Python precisely so the native path needs nothing outside the
+    project (a native-only user never unpacks skills/). A repo-level test
+    keeps that copy byte-identical to the canonical skills/uefn/ one. The
+    VERSE_LSP_CHECK_SCRIPT env var is honored second, for anyone pointing
+    at a custom copy machine-wide.
+    """
+    import os
+    here = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "verse_lsp_check.py")
+    if os.path.isfile(here):
+        return here, None
+    env = os.environ.get("VERSE_LSP_CHECK_SCRIPT")
+    if env and os.path.isfile(env):
+        return env, None
+    return None, {
+        "error": "verse_lsp_check.py not found",
+        "tried": [here] + ([env] if env else []),
+        "hint": "It ships in python/ — re-copy the release's python/ folder "
+                "into this project's Content/Python, or set "
+                "VERSE_LSP_CHECK_SCRIPT to a copy on disk.",
+    }
+
+
+def _find_python_interpreter():
+    """Find a real python.exe to run the check as a SUBPROCESS.
+
+    sys.executable is useless here: inside UEFN's embedded Python it names
+    the editor binary itself, and spawning a second editor would be
+    spectacular. sys.exec_prefix, however, points at the engine's bundled
+    interpreter directory (Engine/Binaries/ThirdParty/Python3/<platform>),
+    which ships a standalone python executable — the exact interpreter
+    this code is already running, so the script sees the same version. A
+    PATH probe is the fallback for the non-embedded case (tests, dev
+    shells).
+    """
+    import os
+    import shutil
+    import sys
+    candidates = [
+        os.path.join(sys.exec_prefix, "python.exe"),
+        os.path.join(sys.exec_prefix, "bin", "python3"),
+    ]
+    exe = getattr(sys, "executable", "") or ""
+    if os.path.basename(exe).lower().startswith("python"):
+        candidates.append(exe)
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c, None
+    for name in ("python", "python3", "py"):
+        found = shutil.which(name)
+        if found:
+            return found, None
+    return None, {
+        "error": "no Python interpreter found to run verse_lsp_check.py",
+        "tried": candidates + ["PATH: python/python3/py"],
+    }
+
+
+def _default_verse_project_root():
+    """Default the script's positional arg to THIS file's Content dir.
+
+    This file lives in <...>/Content/Python, so its grandparent is the
+    Content directory — a form the script accepts directly. Guarded by a
+    bounded walk-up for a *.uefnproject: the engine-side copy also lives
+    under a Content/Python (FortniteGame's), where that walk finds no
+    project file, and analyzing the game install would be the same wrong
+    turn asset_usage.py documents for unreal.Paths — so refuse with an
+    actionable error instead.
+    """
+    import glob as _glob
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    probe = here
+    for _ in range(7):
+        if _glob.glob(os.path.join(probe, "*.uefnproject")):
+            return os.path.dirname(here), None  # .../Content
+        parent = os.path.dirname(probe)
+        if not parent or parent == probe:
+            break
+        probe = parent
+    return None, {
+        "error": "could not auto-detect the project root",
+        "detail": "no *.uefnproject found above {} — this copy of Power "
+                  "Tools may be running from the engine-side install "
+                  "rather than a project".format(here),
+        "hint": "pass project_root explicitly (the folder holding the "
+                "project's Content, or the Content folder itself).",
+    }
+
+
+def _run_verse_check(files, max_auto_files, timeout_seconds, project_root):
+    """Spawn verse_lsp_check.py and map its contract to one JSON string.
+
+    Mirrors the MCP server's invocation of the same script (positional
+    root, --json, repeated --target, --max-auto-files; exit codes 0/1/3/4
+    carry JSON on stdout, 2 is a usage error that may not). Runs
+    synchronously on the calling thread, so the editor hitches for the
+    duration — stated in the tool docstring.
+    """
+    import json as _json
+    import os
+    import subprocess
+
+    script, err = _find_verse_check_script()
+    if err:
+        return _json.dumps(err)
+    interp, err = _find_python_interpreter()
+    if err:
+        return _json.dumps(err)
+    root = project_root or ""
+    if not root:
+        root, err = _default_verse_project_root()
+        if err:
+            return _json.dumps(err)
+    elif not os.path.isdir(root):
+        return _json.dumps({
+            "error": "project_root does not exist: {}".format(root)})
+
+    args = [interp, script, root, "--json"]
+    for f in files or []:
+        args.extend(["--target", str(f)])
+    if max_auto_files and int(max_auto_files) > 0:
+        args.extend(["--max-auto-files", str(int(max_auto_files))])
+    timeout = max(10, int(timeout_seconds or 170))
+    args.extend(["--timeout", str(timeout)])
+
+    creationflags = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
+    try:
+        proc = subprocess.run(
+            args, capture_output=True, text=True,
+            timeout=timeout + 15,  # script enforces its own; this is the backstop
+            creationflags=creationflags,
+        )
+    except subprocess.TimeoutExpired:
+        return _json.dumps({
+            "tier": "timeout",
+            "error": "verse_lsp_check.py exceeded {}s and was killed".format(
+                timeout + 15),
+        })
+    except Exception as exc:
+        return _json.dumps({
+            "error": "failed to spawn verse_lsp_check.py: {}: {}".format(
+                type(exc).__name__, exc),
+            "interpreter": interp,
+        })
+
+    tier = _VERSE_EXIT_TIERS.get(proc.returncode,
+                                 "unknown_exit_{}".format(proc.returncode))
+    out = {"tier": tier, "exit_code": proc.returncode}
+    try:
+        out["result"] = _json.loads(proc.stdout)
+    except Exception:
+        # exit 2 legitimately prints no JSON; anything else unparseable is
+        # surfaced raw rather than dressed up as success.
+        out["stdout"] = (proc.stdout or "")[-4000:]
+        out["stderr"] = (proc.stderr or "")[-4000:]
+        if proc.returncode not in (2,):
+            out["error"] = "script stdout was not valid JSON"
+    return _json.dumps(out)
+
+
 if _HAS_UNREAL and _HAS_REGISTRY:
 
     @unreal.uclass()
@@ -525,6 +699,40 @@ if _HAS_UNREAL and _HAS_REGISTRY:
                 JSON: the saved report, or an error if none exists.
             """
             return _call("moderation_report_read", {})
+
+        @toolset_registry.tool_call
+        @staticmethod
+        def verse_check(
+                files: list[str] | None = None,
+                max_auto_files: int = 0,
+                timeout_seconds: int = 170,
+                project_root: str = "") -> str:
+            """Runs Verse compiler diagnostics over the project, by driving
+            Epic's Verse language server headless.
+
+            This can take a while on a large project, and the editor will
+            hitch until it finishes — the same behavior Epic documents for
+            its own MCP tool calls.
+
+            Args:
+                files: Specific Verse files to force open and analyze —
+                    absolute paths, Content-relative paths, or globs. Empty
+                    analyzes the project's auto-opened set.
+                max_auto_files: Cap on auto-opened files. 0 uses the
+                    script's default.
+                timeout_seconds: Kill the check after this many seconds.
+                project_root: Directory holding the project's Content (or
+                    the Content directory itself). Empty auto-detects from
+                    this file's own location.
+
+            Returns:
+                JSON: {"tier": "clean"|"diagnostics_found"|"usage_error"|
+                "precondition_failed"|"target_not_analyzed"|"timeout",
+                "exit_code", "result": <the script's own JSON>}, or
+                {"error": ...} when the check could not run at all.
+            """
+            return _run_verse_check(files, max_auto_files, timeout_seconds,
+                                    project_root)
 
     @unreal.uclass()
     class PowerToolsEdit(unreal.ToolsetDefinition):

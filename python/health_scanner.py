@@ -400,8 +400,17 @@ def _uefn_project_search_roots():
             add(os.path.join(personal, "Fortnite Projects"))
     except Exception:
         pass
-    for drive in ("C:\\", "D:\\"):
-        add(os.path.join(drive, "UEFN"))
+    # Any drive with a root-level UEFN folder (C:\UEFN, E:\UEFN, ...) --
+    # the drive-root convention is not C:-specific. A: and B: are skipped
+    # (legacy removable-media letters can stall on probe); the isdir gate
+    # keeps nonexistent drives to one cheap failed stat each.
+    for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+        conv = letter + ":\\UEFN"
+        try:
+            if os.path.isdir(conv):
+                add(conv)
+        except Exception:
+            pass
 
     return roots
 

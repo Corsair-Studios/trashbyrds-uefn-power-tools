@@ -610,10 +610,15 @@ def _registry_fortnite_projects_roots():
             roots.insert(0, os.path.abspath(_env_root))
     except Exception:
         pass
-    for _drive in ("C:\\", "D:\\"):
-        _conventional = os.path.join(_drive, "UEFN")
-        if _conventional not in roots:
-            roots.append(_conventional)
+    # Any drive with a root-level UEFN folder, not just C:/D: -- see the
+    # identical rung in asset_usage.py's _uefn_project_search_roots.
+    for _letter in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+        _conventional = _letter + ":\\UEFN"
+        try:
+            if _conventional not in roots and os.path.isdir(_conventional):
+                roots.append(_conventional)
+        except Exception:
+            pass
 
     return roots
 

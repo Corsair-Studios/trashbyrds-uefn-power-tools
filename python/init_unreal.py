@@ -324,6 +324,20 @@ try:
     except Exception:
         pass
 
+    # 6b. Any drive with a root-level UEFN folder (C:\UEFN, E:\UEFN, ...)
+    #    — the drive-root convention on whatever letter it lives. This is
+    #    what covers the engine-side copy on a machine whose projects sit
+    #    outside Documents: nothing in that copy's own path hints where
+    #    projects live, and root 7 below can't help it. A:/B: skipped
+    #    (legacy removable-media letters can stall on probe).
+    for _letter in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+        try:
+            _conv = _letter + ":\\UEFN"
+            if _sync_os.path.isdir(_conv):
+                _add_root(_conv)
+        except Exception:
+            pass
+
     # 7. The directory holding the project THIS copy is running from, if it
     #    is itself inside one — which is the normal case, because UEFN runs
     #    the project copy's init_unreal.py as a startup script. Picks up

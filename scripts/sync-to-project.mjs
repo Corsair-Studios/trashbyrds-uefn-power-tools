@@ -115,9 +115,11 @@ function candidateRoots() {
   }
 
   // A plain drive-root projects folder, which is what this repo's own
-  // author uses and a common convention generally.
-  for (const drive of ['C:\\', 'D:\\']) {
-    add(path.join(drive, 'UEFN'));
+  // author uses and a common convention generally -- on any drive letter,
+  // not just C:/D:. A:/B: skipped (legacy removable-media letters).
+  for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ') {
+    const conv = letter + ':\\UEFN';
+    if (isDir(conv)) add(conv);
   }
 
   return roots.filter(isDir);

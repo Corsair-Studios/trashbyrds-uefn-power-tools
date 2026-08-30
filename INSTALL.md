@@ -148,12 +148,12 @@ The second line is not an error — it means this UEFN build has no Toolset Regi
 
 **Where the tools appear — and where they don't.** These toolsets register with UEFN's **Toolset Registry** and surface through UEFN's own AI assistant. They do **not** appear on the **Editor Preferences → Plugins → MCP Toolset Servers** page — that page only lists outbound server connections you add there yourself (see the optional section under **[5. Epic's official UEFN MCP server](#5-epics-official-uefn-mcp-server)**), and it starts with one blank placeholder entry that belongs to no one.
 
-**What gets registered.** Three toolsets, 29 tools, each returning JSON:
+**What gets registered.** Three toolsets, 30 tools, each returning JSON:
 
 | Toolset | Covers |
 | --- | --- |
 | `PowerToolsInspect` | Status, level info, devices, actor properties, bulk queries, asset listing and inspection, device audit |
-| `PowerToolsScan` | Health, dependency and asset sweeps; texture, material and Niagara usage; Verse tags; moderation/IP pre-flight |
+| `PowerToolsScan` | Health, dependency and asset sweeps; texture, material and Niagara usage; Verse tags; Verse compiler diagnostics (`verse_check`); moderation/IP pre-flight |
 | `PowerToolsEdit` | Select actors, set properties (single and bulk), spawn, duplicate, set transforms |
 
 `batch_set` defaults to a dry run, so a bulk edit reports what it would change before changing anything.
@@ -384,6 +384,8 @@ These are the client-neutral way to point the bridge and its tools at a non-defa
 ### The `uefn_verse_check` tool needs `verse_lsp_check.py`
 
 `uefn_verse_check` doesn't talk to the in-UEFN Python bridge like the other tools — it runs `verse_lsp_check.py` directly as a local subprocess, which drives Epic's bundled Verse language server headless. That means it needs the script to be present on disk, separately from everything else this repo installs.
+
+(The **native** `verse_check` tool from section 1b needs none of this: the same script also ships inside `python/`, so it lands in `Content/Python` with everything else and the native tool finds it there automatically. The environment variable below is for the **MCP server** path only.)
 
 This repo ships that script at `skills/uefn/verse_lsp_check.py`. Point the server at it with the `VERSE_LSP_CHECK_SCRIPT` environment variable:
 
