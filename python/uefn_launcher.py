@@ -1926,10 +1926,33 @@ def _launch_tool(action):
 # ---------------------------------------------------------------------------
 
 def show_launcher():
-    """Create and display the launcher hub window."""
+    """Create and display the launcher hub window.
+
+    Singleton: if a launcher window is already open, it is raised and
+    focused instead of a second one being created. The live-window ref is
+    stashed on the ``sys`` module — NOT a module global — because pt.py
+    reloads this module on every ``import pt``, which would wipe a global
+    and let every reload open one more panel. A real user ended up with
+    two panels exactly that way (pt opened one, then said Yes to
+    init_unreal's deferred startup prompt, which opened another through a
+    fresh module).
+    """
     if not _HAS_TKINTER:
         unreal.log_error("uefn_launcher: tkinter is not available.")
         return
+
+    import sys as _sys
+    _existing = getattr(_sys, "_trashbyrd_launcher_root", None)
+    if _existing is not None:
+        try:
+            if _existing.winfo_exists():
+                _existing.deiconify()
+                _existing.lift()
+                _existing.focus_force()
+                unreal.log("uefn_launcher: Launcher already open — focusing it.")
+                return
+        except Exception:
+            pass  # stale/destroyed ref — fall through and build a new window
 
     import math
     _rows = math.ceil(len(_TOOLS) / 3)
@@ -1938,6 +1961,7 @@ def show_launcher():
     _win_height = 150 + _rows * 180
 
     root = tk.Tk()
+    _sys._trashbyrd_launcher_root = root  # singleton ref — see docstring
     root.title("Trashbyrd's Power Tools v" + BRIDGE_VERSION)
     root.geometry("720x{}".format(_win_height))
     root.configure(bg=_BG)
@@ -2266,6 +2290,8 @@ def show_launcher():
         if _tick_handle[0] is not None:
             unreal.unregister_slate_post_tick_callback(_tick_handle[0])
             _tick_handle[0] = None
+        if getattr(_sys, "_trashbyrd_launcher_root", None) is root:
+            _sys._trashbyrd_launcher_root = None
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", _on_close)

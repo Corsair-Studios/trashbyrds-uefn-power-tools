@@ -698,13 +698,21 @@ except Exception as exc:
     )
 
 # ── 3. Deferred opt-in prompt ~5 s after editor load ────────────────────────
-# Always scheduled — the Tools menu is not extensible in UEFN so the menu
-# entries registered above (if any) are effectively a no-op there. Rather than
-# building the Tkinter window at startup (which stresses the system), we wait
-# ~5 seconds for the editor to finish loading and then show a YES/NO dialog.
-# The user can opt in to open the launcher. Everything is guarded so neither
-# the dialog nor the launcher can break bridge startup.
-if True:  # always run regardless of _menu_registered (menu is no-op in UEFN)
+# Scheduled on the auto-run path only — the Tools menu is not extensible in
+# UEFN so the menu entries registered above (if any) are effectively a no-op
+# there. Rather than building the Tkinter window at startup (which stresses
+# the system), we wait ~5 seconds for the editor to finish loading and then
+# show a YES/NO dialog. The user can opt in to open the launcher. Everything
+# is guarded so neither the dialog nor the launcher can break bridge startup.
+#
+# SUPPRESSED when pt.py is the thing running this file: pt opens the launcher
+# itself immediately after this module finishes, so the deferred prompt would
+# fire five seconds later offering a SECOND launcher — a real user pressed
+# Yes and got two panels. pt sets the env var below before exec'ing us.
+import os as _prompt_os
+if _prompt_os.environ.get("TRASHBYRD_SUPPRESS_STARTUP_PROMPT") == "1":
+    unreal.log("Trashbyrd: startup prompt suppressed (launcher opening directly)")
+else:
     import time as _time
 
     _prompt_start = _time.monotonic()

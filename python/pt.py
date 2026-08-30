@@ -66,6 +66,11 @@ try:
                 unreal.log("[pt] Power Tools has not initialized this session — running init_unreal.py")
             import importlib.util
             import os
+            # We open the launcher ourselves right after this bootstrap, so
+            # init_unreal must not also schedule its deferred "launch Power
+            # Tools?" prompt — a user who pressed Yes on it got a second
+            # panel five seconds after the first.
+            os.environ["TRASHBYRD_SUPPRESS_STARTUP_PROMPT"] = "1"
             _init_path = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)), 'init_unreal.py')
             _spec = importlib.util.spec_from_file_location(
