@@ -121,6 +121,37 @@ Point it at the parent folder, not at a single project. If your project is `D:\W
 
 **Worth knowing:** your project's *folder* name doesn't have to match the island name inside it. A folder called `MyGame_` holding an island called `MyGame` is fine and is handled — you don't need to rename anything.
 
+## 1b. Native UEFN toolsets (no Node, no config file)
+
+**New, and not yet verified end to end — see the caveat at the end of this section.**
+
+Once `python/` is in place (step 1), Power Tools also registers itself with UEFN's own Toolset Registry. Its tools then appear inside UEFN alongside Epic's built-in toolsets, and UEFN's own assistant can call them directly.
+
+**Nothing else is required.** No Node, no `uefn-server.mjs`, no `.mcp.json`, no bridge directory, and no external client. If this is all you want, you can stop after step 1 — sections 2 and 4 exist for driving Power Tools from Claude Code, Codex CLI, or Gemini CLI, which remains fully supported and unchanged.
+
+**Requirements:** **Python Editor Scripting** enabled for the project (the same setting Epic's own MCP server needs), and a UEFN build that ships the Toolset Registry.
+
+**How to tell it worked.** After UEFN loads your project, the Output Log shows one of:
+
+```
+Trashbyrd: native UEFN toolsets registered
+Trashbyrd: native UEFN toolsets unavailable this session (Toolset Registry not present) — MCP bridge unaffected
+```
+
+The second line is not an error — it means this UEFN build has no Toolset Registry, and everything else about Power Tools works as before.
+
+**What gets registered.** Three toolsets, 29 tools, each returning JSON:
+
+| Toolset | Covers |
+| --- | --- |
+| `PowerToolsInspect` | Status, level info, devices, actor properties, bulk queries, asset listing and inspection, device audit |
+| `PowerToolsScan` | Health, dependency and asset sweeps; texture, material and Niagara usage; Verse tags; moderation/IP pre-flight |
+| `PowerToolsEdit` | Select actors, set properties (single and bulk), spawn, duplicate, set transforms |
+
+`batch_set` defaults to a dry run, so a bulk edit reports what it would change before changing anything.
+
+**Caveat, stated plainly.** This uses an Epic API that is marked Experimental and is not covered by Epic's public documentation, so a future UEFN build could change or remove it. The registration is fully isolated: if the API goes away, it logs the "unavailable" line above and the MCP server, the file-IPC bridge, and the launcher all keep working exactly as they do today. Please report whether it worked for you either way.
+
 ## 2. Run the MCP server
 
 If you downloaded a release, you already have everything you need: the zip includes `uefn-server.mjs` at its root, a self-contained bundle with no dependencies to install. Run it directly:

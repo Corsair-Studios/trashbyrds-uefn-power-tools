@@ -600,6 +600,36 @@ except Exception as exc:
         f"Trashbyrd: Failed to start UEFN bridge — {exc}"
     )
 
+# ── 1b. Register native UEFN toolsets ─────────────────────────────
+# Makes the Power Tools commands available to UEFN's own assistant,
+# alongside Epic's built-in toolsets, with no Node server, no client
+# config file, and no file-IPC bridge involved. See
+# powertools_toolset.py for how the registry works and why every tool
+# returns JSON text.
+#
+# Isolated exactly like the bridge block above, and for the same reason:
+# this touches an EXPERIMENTAL, undocumented Epic API
+# (Engine/Plugins/Experimental/ToolsetRegistry). If a future UEFN build
+# renames or removes it, this must degrade to a logged no-op and leave
+# the bridge, the launcher, and the MCP server completely untouched.
+try:
+    import powertools_toolset as _pt_toolset
+
+    if _pt_toolset.register():
+        unreal.log("Trashbyrd: native UEFN toolsets registered")
+    else:
+        # Not an error: this UEFN build has no Toolset Registry, or it
+        # isn't available yet. The MCP/bridge path is unaffected.
+        unreal.log(
+            "Trashbyrd: native UEFN toolsets unavailable this session "
+            "(Toolset Registry not present) — MCP bridge unaffected"
+        )
+    del _pt_toolset
+except Exception as _ts_exc:
+    unreal.log_warning(
+        f"Trashbyrd: toolset registration skipped — {_ts_exc}"
+    )
+
 # Always-visible hint — appears in Output Log regardless of menus or prompts
 unreal.log(
     "Trashbyrd's Power Tools ready — type  import pt  in the Python console to open the launcher"
