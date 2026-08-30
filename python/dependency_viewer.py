@@ -637,15 +637,143 @@ def _resolve_project_root_via_asset_anchor(sample_pkgs):
     return None
 
 
+def _uefn_project_search_roots():
+    """Folders that plausibly hold UEFN projects on this machine.
+
+    Ordered most-authoritative first. UEFN_PROJECTS_ROOT leads because no
+    set of conventions can cover every machine — a user may keep projects
+    on a work drive, a network share, or anywhere else nothing predicts —
+    and one environment variable settles it. After that: the Documents
+    variants (OneDrive Known Folder Move redirection is common enough that
+    the plain path alone misses real projects), and finally the bare
+    drive-root convention.
+    """
+    roots = []
+
+    def add(r):
+        try:
+            if r and r not in roots:
+                roots.append(r)
+        except Exception:
+            pass
+
+    try:
+        env_root = os.environ.get("UEFN_PROJECTS_ROOT")
+        if env_root:
+            add(os.path.abspath(env_root))
+    except Exception:
+        pass
+
+    home = os.path.expanduser("~")
+    add(os.path.join(home, "Documents", "Fortnite Projects"))
+    add(os.path.join(home, "OneDrive", "Documents", "Fortnite Projects"))
+    try:
+        for d in glob.glob(os.path.join(home, "OneDrive*", "Documents", "Fortnite Projects")):
+            add(d)
+    except Exception:
+        pass
+    for env_name in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        try:
+            val = os.environ.get(env_name)
+            if val:
+                add(os.path.join(val, "Documents", "Fortnite Projects"))
+        except Exception:
+            pass
+    # The authoritative Windows "Personal" (Documents) known folder, which
+    # is what Explorer itself uses, so it covers any redirection scheme.
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+        ) as key:
+            personal_raw, _ = winreg.QueryValueEx(key, "Personal")
+        personal = os.path.expandvars(personal_raw)
+        if personal:
+            add(os.path.join(personal, "Fortnite Projects"))
+    except Exception:
+        pass
+    for drive in ("C:\\", "D:\\"):
+        add(os.path.join(drive, "UEFN"))
+
+    return roots
+
+
+def _candidate_project_dirs(project_name):
+    """Project directories worth probing, best guess first.
+
+    A project's FOLDER name is not required to match its island/plugin
+    name. Real example: a project folder named ``ChaosValley_`` whose
+    island prefix (and plugin) is ``ChaosValley`` — a trailing underscore,
+    a rename, or a "MyGame v2" folder all break a pure folder-name probe,
+    which is why every project folder under the search roots is offered
+    here and the plugin-name match is done by the caller. The exact
+    folder-name match still comes first because it is the common case and
+    the caller stops at the first candidate that validates.
+    """
+    dirs = []
+    seen = set()
+
+    def add(d):
+        try:
+            norm = os.path.normpath(d)
+            key = os.path.normcase(norm)
+            if key in seen or not os.path.isdir(norm):
+                return
+            seen.add(key)
+            dirs.append(norm)
+        except Exception:
+            pass
+
+    roots = _uefn_project_search_roots()
+
+    # 1. Exact folder-name match -- the common case.
+    for root in roots:
+        add(os.path.join(root, project_name))
+
+    # 2. Any project folder CONTAINING a plugin named after the island
+    #    prefix. This is what catches a renamed or suffixed project folder,
+    #    and matching the plugin name is a far stronger signal than the
+    #    folder name, so it outranks the exhaustive sweep below. Without
+    #    this, a project folder like "ChaosValley_" holding plugin
+    #    "ChaosValley" is only found by luck of alphabetical order.
+    for root in roots:
+        try:
+            for entry in sorted(os.listdir(root)):
+                cand = os.path.join(root, entry)
+                if os.path.isdir(os.path.join(cand, "Plugins", project_name)):
+                    add(cand)
+        except Exception:
+            pass
+
+    # 3. Everything else, so a project whose plugin is named differently
+    #    again still gets a chance. Costs only stat calls: the caller's
+    #    validation gate rejects any candidate whose Content does not
+    #    actually hold this island's assets.
+    for root in roots:
+        try:
+            for entry in sorted(os.listdir(root)):
+                add(os.path.join(root, entry))
+        except Exception:
+            pass
+    return dirs
+
+
 def _default_location_project_roots(project_prefix):
     """
     Candidate 3 (NEW) — probe conventional UEFN project locations for a
-    project named after the island prefix (``/YourProject/`` -> ``YourProject``):
-    ``~/Documents/Fortnite Projects/<Name>``,
-    ``~/OneDrive/Documents/Fortnite Projects/<Name>``, and any
-    ``~/OneDrive*/Documents/Fortnite Projects/<Name>`` match (OneDrive can
-    redirect Documents under a tenant-specific folder name). Only ever a
-    starting guess — the validation gate still decides the winner.
+    project named after the island prefix (``/YourProject/`` -> ``YourProject``).
+    See _uefn_project_search_roots for which folders are searched.
+
+    Returns directories to which the caller will append ``Content``. For the
+    real UEFN layout that means returning the **plugin** directory
+    (``<project>/Plugins/<PluginName>``), because that is what actually has
+    a ``Content`` beneath it — UEFN does not put ``Content`` next to the
+    ``.uefnproject``. The legacy flat ``<project>/Content`` layout is still
+    returned as well, after the plugin candidates.
+
+    Only ever a starting guess — the validation gate still decides the
+    winner, so offering several candidates costs nothing but a stat call.
     """
     if not project_prefix:
         return []
@@ -653,28 +781,34 @@ def _default_location_project_roots(project_prefix):
     if not project_name:
         return []
 
-    home = os.path.expanduser("~")
-    probes = [
-        os.path.join(home, "Documents", "Fortnite Projects", project_name),
-        os.path.join(home, "OneDrive", "Documents", "Fortnite Projects", project_name),
-    ]
-    try:
-        probes.extend(glob.glob(os.path.join(home, "OneDrive*", "Documents", "Fortnite Projects", project_name)))
-    except Exception:
-        pass
-
     results = []
-    seen = set()
-    for proj_dir in probes:
-        norm = os.path.normpath(proj_dir)
-        if norm in seen or not os.path.isdir(norm):
-            continue
-        seen.add(norm)
+    for norm in _candidate_project_dirs(project_name):
         try:
             has_uefnproject = any(entry.endswith(".uefnproject") for entry in os.listdir(norm))
         except Exception:
             has_uefnproject = False
-        if has_uefnproject and os.path.isdir(os.path.join(norm, "Content")):
+        if not has_uefnproject:
+            continue
+
+        # Real UEFN layout: <project>/Plugins/<PluginName>/Content. The
+        # plugin named after the island prefix is the strongest signal, so
+        # it is offered before any sibling plugin.
+        plugins_dir = os.path.join(norm, "Plugins")
+        preferred = os.path.join(plugins_dir, project_name)
+        if os.path.isdir(os.path.join(preferred, "Content")):
+            results.append(preferred)
+        try:
+            for plugin_name in sorted(os.listdir(plugins_dir)):
+                if plugin_name == project_name:
+                    continue
+                plugin_dir = os.path.join(plugins_dir, plugin_name)
+                if os.path.isdir(os.path.join(plugin_dir, "Content")):
+                    results.append(plugin_dir)
+        except Exception:
+            pass
+
+        # Legacy flat layout: <project>/Content
+        if os.path.isdir(os.path.join(norm, "Content")):
             results.append(norm)
     return results
 

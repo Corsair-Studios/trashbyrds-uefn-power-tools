@@ -23,7 +23,7 @@ The MCP server registers 30 `uefn_*` tools. Run the server and list its tools fr
 
 ## Runs alongside Epic's official UEFN MCP server
 
-Epic ships its own official UEFN MCP server, and you can run Power Tools alongside it without conflict. See Epic's documentation for setup: https://dev.epicgames.com/documentation/fortnite/uefn-mcp
+Epic ships its own official UEFN MCP server, and you can run Power Tools alongside it without conflict. Epic's registers as `unreal-mcp` over local HTTP; Power Tools registers as `powertools` over stdio — different keys, different transports, no shared port or files. When adding Power Tools to a client config that already has an `unreal-mcp` entry, merge into the existing server object rather than replacing it; see [INSTALL.md](INSTALL.md#5-epics-official-uefn-mcp-server) for details. Epic's own documentation: https://dev.epicgames.com/documentation/fortnite/uefn-mcp
 
 ## Why use this
 

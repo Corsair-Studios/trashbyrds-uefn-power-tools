@@ -597,6 +597,24 @@ def _registry_fortnite_projects_roots():
             roots.append(os.path.join(_personal, "Fortnite Projects"))
     except Exception:
         pass
+
+    # UEFN_PROJECTS_ROOT and the bare drive-root convention. The registry
+    # value above is authoritative only for projects kept under Documents;
+    # plenty of users keep them somewhere else entirely (C:\UEFN, a work
+    # drive, a network share), where no registry key will ever point. The
+    # env var is the explicit answer for those, and is checked first so a
+    # user who sets it is never second-guessed. See docs/PATH-DISCOVERY.md.
+    try:
+        _env_root = os.environ.get("UEFN_PROJECTS_ROOT")
+        if _env_root:
+            roots.insert(0, os.path.abspath(_env_root))
+    except Exception:
+        pass
+    for _drive in ("C:\\", "D:\\"):
+        _conventional = os.path.join(_drive, "UEFN")
+        if _conventional not in roots:
+            roots.append(_conventional)
+
     return roots
 
 
@@ -612,14 +630,28 @@ def _registry_fortnite_project_candidates():
             for _proj_dir in glob.glob(os.path.join(_root, "*")):
                 if not os.path.isdir(_proj_dir):
                     continue
-                # Prefer the project's Content/ dir (what every other rung
-                # returns) when present; otherwise fall back to the
-                # project root itself so _has_verse's own depth-capped
-                # walk still has a chance to find it.
+                # Prefer a real Content/ dir (what every other rung
+                # returns). UEFN nests it under Plugins/<PluginName>/, not
+                # next to the .uefnproject, so check there first — relying
+                # on the project-root fallback below meant _has_verse had
+                # to rediscover it by walking, which its depth cap can miss
+                # on a deep project. The flat <project>/Content is the
+                # legacy layout and still checked after.
+                _added_any = False
+                try:
+                    _plugins_dir = os.path.join(_proj_dir, "Plugins")
+                    for _plugin_name in sorted(os.listdir(_plugins_dir)):
+                        _plugin_content = os.path.join(_plugins_dir, _plugin_name, "Content")
+                        if os.path.isdir(_plugin_content):
+                            candidates.append(_plugin_content)
+                            _added_any = True
+                except Exception:
+                    pass
+
                 _proj_content = os.path.join(_proj_dir, "Content")
                 if os.path.isdir(_proj_content):
                     candidates.append(_proj_content)
-                else:
+                elif not _added_any:
                     candidates.append(_proj_dir)
         except Exception:
             pass

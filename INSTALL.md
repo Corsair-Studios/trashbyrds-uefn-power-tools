@@ -14,15 +14,15 @@ If you're running Claude Code, Codex CLI, Gemini CLI, Cursor, or a similar assis
 Paste this into your assistant:
 
 ```
-Read the INSTALL.md at <path-to-this-file> in the Power Tools repo. If I haven't already downloaded and unpacked a release, do that first, verify the unpack landed correctly, and ask me where to put the folder permanently. Then figure out which MCP client I'm using and find its config file. Read that config file first. Propose a merged version that adds the powertools server entry while preserving every server already listed in it — use the real absolute path to my unpacked Power Tools folder, not a placeholder. Show me the exact change before writing anything, and wait for my approval. Also handle the separate step of copying python/ into my UEFN project's Content/Python.
+Read the INSTALL.md at https://github.com/Corsair-Studios/trashbyrds-uefn-power-tools/blob/main/INSTALL.md. If I haven't already downloaded and unpacked a release, do that first, verify the unpack landed correctly, and ask me where to put the folder permanently. Then figure out which MCP client I'm using and find its config file. Read that config file first. Propose a merged version that adds the powertools server entry while preserving every server already listed in it — including Epic's official unreal-mcp entry if it's there, which must be left exactly as it is — and use the real absolute path to my unpacked Power Tools folder, not a placeholder. Show me the exact change before writing anything, and wait for my approval. Also handle the separate step of copying python/ into my UEFN project's plugin Content folder — that is Plugins/<PluginName>/Content/Python inside the project, NOT a Content folder next to the .uefnproject file.
 ```
 
 **What the assistant needs to get right:**
-- The server key is `powertools`, chosen so it doesn't collide with Epic's official UEFN MCP server, which commonly uses `uefn` as its key.
+- The server key is `powertools`, chosen so it doesn't collide with Epic's official UEFN MCP server, which registers itself as `unreal-mcp`. Running both at once is supported and expected — adding Power Tools must never rename, replace, or remove an existing `unreal-mcp` entry. See **[5. Epic's official UEFN MCP server](#5-epics-official-uefn-mcp-server)** for how the two coexist.
 - The config shape differs per client — JSON with an `mcpServers` object, TOML `[mcp_servers.X]` tables, or VS Code's `servers` key. The per-client sections under **Connecting an AI client** below are authoritative for the exact shape and location.
 - `<POWER_TOOLS_DIR>` in every example in this file means the absolute path to the folder holding `uefn-server.mjs`. It must be replaced with a real path, and that folder needs to be a permanent location, not one that will move or get deleted.
 - Config files must be merged, never replaced — an existing config can already list other MCP servers, and overwriting the file instead of merging into it silently deletes them.
-- Copying the Python bridge (`python/` into the UEFN project's `Content/Python`) and configuring the MCP client are two separate steps. Both are required; doing only one leaves the install incomplete.
+- Copying the Python bridge and configuring the MCP client are two separate steps. Both are required; doing only one leaves the install incomplete. The bridge goes into the project's **plugin** `Content/Python` folder — see step 1, because it is *not* the folder next to the `.uefnproject` file.
 
 **If it's also fetching the release, these facts matter:**
 - The canonical source is `https://github.com/Corsair-Studios/trashbyrds-uefn-power-tools`, and releases live on that repo's Releases page. Anything else is not this project — a fork or mirror may not contain the same code.
@@ -31,21 +31,34 @@ Read the INSTALL.md at <path-to-this-file> in the Power Tools repo. If I haven't
 - Verification after unpacking: `uefn-server.mjs` exists at the top level, and the `version` field in `package.json` matches the release tag that was downloaded (tag `v0.1.3` corresponds to version `0.1.3`). A mismatch means the wrong artifact was used.
 - The destination folder needs to be permanent — not Downloads, not a temp folder, not a location a cleanup or reinstall would remove — because the client config hard-codes the absolute path to `uefn-server.mjs`. Moving the folder later breaks the config until the path is updated.
 
-**What it cannot do for you.** An assistant editing config files cannot verify the bridge is actually running inside UEFN. That check requires UEFN open with your project loaded, running `import init_unreal` in UEFN's Python console (UEFN does not auto-run third-party `init_unreal.py` on its own), and confirming a fresh `heartbeat.json` appears in the bridge's IPC directory. See **[3. How it connects](#3-how-it-connects)** below for what a working versus non-working bridge looks like and why a client's own "Connected" status isn't proof either way.
+**What it cannot do for you.** An assistant editing config files cannot verify the bridge is actually running inside UEFN. That check requires UEFN open with your project loaded, running `import init_unreal` in UEFN's Python console (UEFN does auto-run `init_unreal.py` as a startup script when the project has Python enabled — but only at editor startup, so a project that was already open, or one where Python was enabled or the files were copied in mid-session, still needs the manual run), and confirming a fresh `heartbeat.json` appears in the bridge's IPC directory. See **[3. How it connects](#3-how-it-connects)** below for what a working versus non-working bridge looks like and why a client's own "Connected" status isn't proof either way.
 
 ## 1. Install the Python bridge into your UEFN project
 
 Copy the **contents** of this repo's `python/` folder into your UEFN project's `Content/Python/` directory.
 
-`Content/Python` lives inside the folder that holds your project's `.uefnproject` file — that's your UEFN project root. If a `Python` folder doesn't already exist under `Content`, create it:
+**Finding `Content` — this is the step people get wrong.** UEFN does **not** put `Content` next to your `.uefnproject` file. It nests it inside the project's plugin, so the folder you want is `Plugins/<PluginName>/Content/`. Create `Python` inside it if it isn't there already:
 
 ```
-<your-uefn-project>/Content/Python/
+<your-uefn-project>/
+  MyProject.uefnproject                <- the .uefnproject file
+  Plugins/
+    MyProject/
+      Content/                         <- THE Content folder — the one you want
+        Python/                        <- create this if it doesn't exist
 ```
 
-After copying, `<your-uefn-project>/Content/Python/` should contain `init_unreal.py` directly — **not** a nested `Content/Python/python/init_unreal.py`. Copy the folder's contents, not the folder itself.
+So the destination is `<your-uefn-project>/Plugins/<PluginName>/Content/Python/`. There is normally **no** `Content` folder next to the `.uefnproject` file, and if you create one yourself UEFN will never read it. If you're unsure which `Content` folder is the right one, it's the one that already holds your `.umap` and `.uasset` files. `<PluginName>` is usually your project's name but does not have to be — use whatever folder is actually there under `Plugins/`.
 
-**Symptom of copying the folder instead of its contents:** no error, no console output — UEFN silently finds nothing and the tools never appear. **Check:** if `Content/Python/python/` exists on disk, your files are one level too deep; move everything up into `Content/Python/` directly.
+**`Content/Python` is invisible inside UEFN.** It holds no `.uasset` files, so it never appears in UEFN's Content Browser. Create it and copy into it from File Explorer, not from inside UEFN.
+
+After copying, `Plugins/<PluginName>/Content/Python/` should contain `init_unreal.py` directly — **not** a nested `Content/Python/python/init_unreal.py`. Copy the folder's contents, not the folder itself.
+
+**Symptom of getting the location wrong — either the wrong `Content` folder, or files one level too deep:** no error, no console output — UEFN silently finds nothing and the tools never appear. **Check both:**
+- `Plugins/<PluginName>/Content/Python/init_unreal.py` exists at exactly that path. If what you have instead is `<your-uefn-project>/Content/Python/`, that is the wrong folder — move it under the plugin.
+- `Content/Python/python/` does **not** exist. If it does, your files are one level too deep; move everything up into `Content/Python/` directly.
+
+**Once the files are in place:**
 
 - Start the Python bridge by opening UEFN's Python console once your project is open and running `import init_unreal` — see **Starting the bridge** below.
 - If UEFN prompts you to enable the Python Editor Script Plugin, accept it and restart UEFN.
@@ -78,7 +91,7 @@ importlib.reload(uefn_bridge)
 
 ### A tool seems to be running an old version
 
-UEFN can load Python from two places: your project's `Content/Python/` (where you just copied files) and an engine-side copy inside your Fortnite installation, at `FortniteGame/Content/Python/` under wherever your Epic Games Launcher installed Fortnite. That parent location varies by machine and by Launcher settings, so no single real path is given here.
+UEFN can load Python from two places: your project's plugin `Content/Python/` (where you just copied files) and an engine-side copy inside your Fortnite installation, at `FortniteGame/Content/Python/` under wherever your Epic Games Launcher installed Fortnite. That parent location varies by machine and by Launcher settings, so no single real path is given here. On a clean install `FortniteGame/Content/` exists but has **no** `Python` subfolder — that folder appears only once something puts files there.
 
 `init_unreal.py` syncs the newest project copy over the engine copy automatically when the bridge starts, comparing the `BRIDGE_VERSION` stamp in `bridge_version.py`. If that stamp already matches on both sides, the sync can skip copying even when the file contents underneath differ — so the engine copy can end up running stale code behind a version number that looks current.
 
@@ -86,7 +99,27 @@ UEFN can load Python from two places: your project's `Content/Python/` (where yo
 
 **Check which version is loaded:** the Power Tools launcher window footer (`import pt`) shows the bridge version currently running.
 
-**Manual fix:** copy this repo's `python/` files into the engine-side `FortniteGame/Content/Python/` directory as well as the project copy, delete any `__pycache__` folder in both locations, and restart UEFN.
+**Manual fix:** copy this repo's `python/` files into the engine-side `FortniteGame/Content/Python/` directory as well as the project copy — **create that `Python` folder first, since it does not exist by default** — then delete any `__pycache__` folder in both locations and restart UEFN.
+
+### A tool can't find your project
+
+Several tools locate your project on disk rather than through the editor — the version sync above, the Verse cross-reference check, the health scan, and the device audit. They try a list of known locations, then validate each guess against real assets before trusting it.
+
+**If your projects live somewhere conventional** — `Documents\Fortnite Projects`, including any OneDrive-redirected version of it, or a plain `C:\UEFN` / `D:\UEFN` folder — this is automatic and you can ignore this section.
+
+**If they live anywhere else** — a work drive, a network share, a folder named something else entirely — no amount of guessing will find them. Tell Power Tools directly by setting one environment variable to the folder that **contains** your project folders:
+
+```
+setx UEFN_PROJECTS_ROOT "D:\Work\UEFN"
+```
+
+Point it at the parent folder, not at a single project. If your project is `D:\Work\UEFN\MyGame\MyGame.uefnproject`, the value is `D:\Work\UEFN`.
+
+**This must be a real environment variable, not a client config entry** — the same trap as `UEFN_BRIDGE_DIR` above. The tools that need it run inside UEFN, so the variable has to exist in UEFN's own process: set it with `setx` (or System Properties → Environment Variables) and **restart UEFN** so it inherits the new value. Putting it in `.mcp.json` or `config.toml` will not work.
+
+**Symptoms that point here:** a Verse cross-reference check that reports nothing, a health scan that finds no files, a device audit that comes up empty, or the version-sync line in the Output Log saying it found no project copy — all while the project is plainly open in UEFN.
+
+**Worth knowing:** your project's *folder* name doesn't have to match the island name inside it. A folder called `MyGame_` holding an island called `MyGame` is fine and is handled — you don't need to rename anything.
 
 ## 2. Run the MCP server
 
@@ -136,29 +169,30 @@ If you're using the in-UEFN launcher window (`import pt` → MCP Bridge info), i
 
 ### Claude Code
 
-**1. Which file, and where.** Claude Code reads its MCP configuration from a file named `.mcp.json`. This file is **project-local**, not global — Claude Code looks for it in the directory you launch Claude Code from, not in your home folder. You must place it at the root of your UEFN project: the same folder that directly contains your project's `.uefnproject` file (the same folder where you created `Content/Python/` in step 1 above).
+**1. Which file, and where.** Claude Code reads its MCP configuration from a file named `.mcp.json`. This file is **project-local**, not global — Claude Code looks for it in **the directory you launch Claude Code from**, and nowhere else: not your home folder, and not any parent folder. That launch directory is the only thing that decides where this file goes.
 
-**2. Create the directory first?** No new directory is needed — `.mcp.json` is a single file that goes directly in your UEFN project root, alongside (not inside) the `Content` folder.
+So: pick the folder you'll actually run Claude Code in while working on this project, and put `.mcp.json` there. Your UEFN project root (next to the `.uefnproject` file) and the plugin `Content` folder you edit Verse in are both fine choices — they are different folders, and only the one you launch from matters. This is unrelated to where the Python bridge goes in step 1.
 
-**3. Full file content.** Create a file named exactly `.mcp.json` (note the leading dot, and no other file extension) in your UEFN project root with this content if the file doesn't exist yet, or merge the `powertools` entry into the existing `mcpServers` object if `.mcp.json` already exists, preserving any servers already there:
+**2. Create the directory first?** No new directory is needed — `.mcp.json` is a single file that goes directly in the folder you chose above.
+
+**3. Full file content.** Create a file named exactly `.mcp.json` (note the leading dot, and no other file extension) in that folder with this content if the file doesn't exist yet, or merge the `powertools` entry into the existing `mcpServers` object if `.mcp.json` already exists, preserving any servers already there:
 
 ```json
 {
   "mcpServers": {
     "powertools": {
       "command": "node",
-      "args": ["<POWER_TOOLS_DIR>/uefn-server.mjs"],
-      "env": {
-        "UEFN_BRIDGE_DIR": "<POWER_TOOLS_DIR>/bridge-dir"
-      }
+      "args": ["<POWER_TOOLS_DIR>/uefn-server.mjs"]
     }
   }
 }
 ```
 
-Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder. The `env` block is **optional** — if you don't need a non-default bridge directory, delete the entire `"env": { ... }` block (including its comma on the line above it) and just leave `"command"` and `"args"`.
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder. That is the whole entry — **no `env` block is needed**, and you should not add one here without reading [Environment overrides](#environment-overrides) first. In particular, do not set `UEFN_BRIDGE_DIR` in this file on its own: a client `env` block reaches the MCP server only, never UEFN's own Python, and setting it on one side alone puts the two halves of the bridge in different directories where they can never pair.
 
-**4. Where to launch Claude Code from.** This is the step people get wrong. Claude Code only reads `.mcp.json` from the directory you **launch it in** — not from any other folder, and not recursively from parent folders. You must open your terminal (or your editor's integrated terminal) in your UEFN project root — the exact folder where you just created `.mcp.json` — and start Claude Code from there. If you launch Claude Code from your home directory, your Desktop, or any other folder, it will not find this `.mcp.json` and the `powertools` server will not appear at all.
+If your `.mcp.json` already lists other servers — Epic's official `unreal-mcp` entry, or anything else — add `powertools` alongside them inside the existing `mcpServers` object. Do not replace the file.
+
+**4. Where to launch Claude Code from.** This is the step people get wrong. Claude Code only reads `.mcp.json` from the directory you **launch it in** — not from any other folder, and not recursively from parent folders. Open your terminal (or your editor's integrated terminal) in the exact folder where you created `.mcp.json` in step 1, and start Claude Code from there. If you launch Claude Code from your home directory, your Desktop, or any other folder, it will not find this `.mcp.json` and the `powertools` server will not appear at all.
 
 **5. In UEFN's Python console, in order.** With your UEFN project open, open the Python console (Output Log panel → console dropdown → **Python**) and run these two lines, in this order:
 
@@ -194,12 +228,9 @@ This client has a sharp edge (the sandbox gotcha in step 7) that has caused real
 [mcp_servers.powertools]
 command = "node"
 args = ["<POWER_TOOLS_DIR>/uefn-server.mjs"]
-
-[mcp_servers.powertools.env]
-UEFN_BRIDGE_DIR = "<POWER_TOOLS_DIR>/bridge-dir"
 ```
 
-Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder, using forward slashes. The `[mcp_servers.powertools.env]` table is **optional** — omit that entire two-line block if you don't need a non-default bridge directory (it defaults to a per-machine temp directory).
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder, using forward slashes. That is the whole table — **no `env` table is needed**, and you should not add one without reading [Environment overrides](#environment-overrides) first. In particular, do not set `UEFN_BRIDGE_DIR` here on its own: a client `env` table reaches the MCP server only, never UEFN's own Python, and setting it on one side alone puts the two halves of the bridge in different directories where they can never pair. If the file already contains other `[mcp_servers.*]` tables (Epic's official `unreal-mcp`, or anything else), leave them exactly as they are.
 
 **4. Where to launch Codex CLI from.** It does not matter. Because Codex CLI's config is global (step 1), you can launch `codex` from any directory on your machine and it will find the same `~/.codex/config.toml` and the same `powertools` server entry every time.
 
@@ -225,11 +256,11 @@ This reload form reliably (re)starts the bridge regardless of whether `init_unre
 
 **1. Which file, and where.** Gemini CLI supports two locations, and either one works — pick one, don't use both:
 - **Global:** `~/.gemini/settings.json` (in your home directory — on Windows, `C:/Users/<your-username>/.gemini/settings.json`). Use this if you want the `powertools` server available no matter which project you're in.
-- **Project-local:** `.gemini/settings.json` inside your UEFN project root (the folder holding your `.uefnproject` file). Use this if you only want the `powertools` server available for this specific project.
+- **Project-local:** `.gemini/settings.json` inside the folder you launch Gemini CLI from for this project. Use this if you only want the `powertools` server available for this specific project.
 
 **2. Create the directory first?** Whichever location you pick, the `.gemini` folder likely doesn't exist yet. Create it before creating the file inside it:
 - For the global option, create a folder named `.gemini` directly inside your user home directory.
-- For the project-local option, create a folder named `.gemini` directly inside your UEFN project root (the same folder that holds `Content/` and `.uefnproject`).
+- For the project-local option, create a folder named `.gemini` directly inside the folder you launch Gemini CLI from for this project.
 
 **3. Full file content.** Inside whichever `settings.json` you chose, put this complete content (if the file already exists with other settings, merge this `mcpServers` key into the existing JSON object rather than replacing the whole file):
 
@@ -238,18 +269,15 @@ This reload form reliably (re)starts the bridge regardless of whether `init_unre
   "mcpServers": {
     "powertools": {
       "command": "node",
-      "args": ["<POWER_TOOLS_DIR>/uefn-server.mjs"],
-      "env": {
-        "UEFN_BRIDGE_DIR": "<POWER_TOOLS_DIR>/bridge-dir"
-      }
+      "args": ["<POWER_TOOLS_DIR>/uefn-server.mjs"]
     }
   }
 }
 ```
 
-Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder, using forward slashes. The `env` block is optional — remove it entirely if you don't need a non-default bridge directory. Gemini CLI's `env` values also support `$VAR_NAME` expansion, so instead of a literal path you can reference a variable already set in your shell, e.g. `"UEFN_BRIDGE_DIR": "$MY_BRIDGE_DIR"`.
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own unzipped Power Tools folder, using forward slashes. That is the whole entry — **no `env` block is needed**, and you should not add one without reading [Environment overrides](#environment-overrides) first. In particular, do not set `UEFN_BRIDGE_DIR` here on its own: a client `env` block reaches the MCP server only, never UEFN's own Python, and setting it on one side alone puts the two halves of the bridge in different directories where they can never pair. Merge `powertools` into any `mcpServers` object the file already has — including Epic's official `unreal-mcp` entry, which must be left as it is — rather than replacing the file.
 
-**4. Where to launch Gemini CLI from.** If you used the **global** file, it doesn't matter — launch `gemini` from anywhere. If you used the **project-local** file, you must launch `gemini` from your UEFN project root (the folder containing the `.gemini` folder you just created), the same way Claude Code requires.
+**4. Where to launch Gemini CLI from.** If you used the **global** file, it doesn't matter — launch `gemini` from anywhere. If you used the **project-local** file, you must launch `gemini` from the folder containing the `.gemini` folder you just created, the same way Claude Code requires.
 
 **5. In UEFN's Python console, in order.** With your UEFN project open, open the Python console (Output Log panel → console dropdown → **Python**) and run these two lines, in this order:
 
@@ -275,7 +303,7 @@ This reliably (re)starts the bridge even if `init_unreal` was already imported e
 
 **Using VS Code or Antigravity IDE? You probably don't need this section.** VS Code and Antigravity IDE are editors — they are hosts you run a terminal inside, not MCP clients in their own right. If you're using either one, the normal path is to open its integrated terminal and run Claude Code, Codex CLI, or Gemini CLI there, then follow that CLI's section above exactly as written. The editor itself needs no separate MCP setup; only the CLI running inside it does. The VS Code Copilot agent-mode and Antigravity-native config entries below exist only for people who specifically want the editor's own built-in agent (not a CLI in its terminal) to talk to the bridge, which is the untested path.
 
-Every client below uses the same config **shape** as the Claude Code section above: a `command` of `node`, an `args` array pointing at your `uefn-server.mjs`, and an optional `env` block for `UEFN_BRIDGE_DIR` (see the Claude Code section's `.mcp.json` example for the full JSON to copy and adapt — name the server entry `powertools`, same as that example). What differs per client is only the file location and, in one case, the top-level key name:
+Every client below uses the same config **shape** as the Claude Code section above: a `command` of `node` and an `args` array pointing at your `uefn-server.mjs` (see the Claude Code section's `.mcp.json` example for the full JSON to copy and adapt — name the server entry `powertools`, same as that example, and merge it into whatever servers the file already lists). No `env` block is needed; read [Environment overrides](#environment-overrides) before adding one. What differs per client is only the file location and, in one case, the top-level key name:
 
 | Client | Config file | Key |
 | --- | --- | --- |
@@ -299,11 +327,15 @@ If it doesn't work: double-check the file is valid JSON at the exact path for yo
 
 ### Environment overrides
 
-These are the client-neutral way to point the bridge and its tools at a non-default location — set them in the shell/process that launches the MCP server (or, where a client's `env` block is supported, there):
+These are the client-neutral way to point the bridge and its tools at a non-default location — set them in the shell/process that launches the MCP server (or, where a client's `env` block is supported, there).
+
+> **`UEFN_BRIDGE_DIR` is the one that bites.** The bridge has two halves — the MCP server, and the Python running inside UEFN — and they find each other only by both resolving the same directory. A client `env` block sets the variable for **the MCP server only**; UEFN's own process never sees it and falls back to `<temp>/uefn_bridge`. Set it on one side alone and the two halves sit in different directories forever: your client will report the server "Connected" while every bridge tool fails.
+>
+> **You almost certainly do not need this variable.** Left unset, both sides independently resolve the same per-machine temp path, which is exactly why the default needs no configuration. Set it only if you genuinely need a custom directory, and then set it for **both** processes — for UEFN that means a machine- or user-level environment variable in place *before* UEFN starts, not anything in a client config file.
 
 | Variable | What it points to |
 | --- | --- |
-| `UEFN_BRIDGE_DIR` | The bridge IPC directory the MCP server and the in-UEFN Python bridge use to hand off work. Defaults to a per-machine temp directory if unset. |
+| `UEFN_BRIDGE_DIR` | The bridge IPC directory the MCP server and the in-UEFN Python bridge use to hand off work. Defaults to a per-machine temp directory if unset. Must be set for **both** processes or neither — see the warning above. |
 | `UEFN_VERSE_PROJECT_DIR` | UEFN's `VerseProject` data root — where digests and `.vproject` files live. |
 | `VERSE_LSP_PATH` | The Verse language server binary, used by tools that run compiler diagnostics. |
 | `VERSE_LSP_CHECK_SCRIPT` | Where `verse_lsp_check.py` itself lives (see below) — a different thing from `VERSE_LSP_PATH`, which is the analyzer binary the script locates internally. |
@@ -316,20 +348,61 @@ This repo ships that script at `skills/uefn/verse_lsp_check.py`. Point the serve
 
 ```json
 "env": {
-  "VERSE_LSP_CHECK_SCRIPT": "<POWER_TOOLS_DIR>\\skills\\uefn\\verse_lsp_check.py"
+  "VERSE_LSP_CHECK_SCRIPT": "<POWER_TOOLS_DIR>/skills/uefn/verse_lsp_check.py"
 }
 ```
 
-Replace `<POWER_TOOLS_DIR>` with the real, full path to your own Power Tools folder (source clone or unzipped release) — keep the doubled backslashes if you stay on Windows-style paths, since a single backslash is not valid JSON escaping. Add that to whichever client config you're already using from **Connecting an AI client** above (alongside `UEFN_BRIDGE_DIR` if you're setting that too). Without it, `uefn_verse_check` fails with an honest error listing every location it tried — set the variable to the path above and it resolves.
+Replace `<POWER_TOOLS_DIR>` with the real, full path to your own Power Tools folder (source clone or unzipped release), using forward slashes on Windows as everywhere else in this document. (Windows-style backslashes work too, but in JSON they must be doubled — `\\` — since a single backslash is not valid JSON escaping. Forward slashes avoid the problem entirely and Node accepts them.) Add that to whichever client config you're already using from **Connecting an AI client** above. Unlike `UEFN_BRIDGE_DIR`, this one **is** safe to set in a client `env` block alone: `verse_lsp_check.py` runs as a subprocess of the MCP server, so the server's environment is the only one that needs it. Without it, `uefn_verse_check` fails with an honest error listing every location it tried — set the variable to the path above and it resolves.
 
 ## 5. Epic's official UEFN MCP server
 
-Epic ships its own official UEFN MCP server. Enable it in UEFN via **Project Settings → Python Editor Scripting** and **Project Settings → UEFN MCP Toolsets**; once enabled it binds `http://127.0.0.1:8000/mcp` by default. You can install and run both Epic's server and Power Tools at the same time — that's the intended configuration, not a conflict. See Epic's own documentation for what its server covers: https://dev.epicgames.com/documentation/fortnite/uefn-mcp
+Epic ships its own official UEFN MCP server. Enable it in UEFN via **Project Settings → Python Editor Scripting** and **Project Settings → UEFN MCP Toolsets**; once enabled it binds `http://127.0.0.1:8000/mcp` by default (both the port and the URL path are configurable in its settings, and it can be started by hand with the console command `ModelContextProtocol.StartServer`). See Epic's own documentation for what its server covers: https://dev.epicgames.com/documentation/fortnite/uefn-mcp
 
-Power Tools registers under the server key `powertools`, specifically so it sits alongside Epic's own server entry in your client config instead of overwriting it. If you configured Power Tools under a different key in an older setup, double-check it isn't the same key Epic's server uses in that same config file.
+**Running both at once is supported and expected.** They do not compete for anything:
+
+| | Epic's server | Power Tools |
+| --- | --- | --- |
+| Config key | `unreal-mcp` | `powertools` |
+| Transport | HTTP on `127.0.0.1:8000` | stdio (`node uefn-server.mjs`) |
+| Reaches UEFN via | its own in-process HTTP server | files in the bridge IPC directory |
+
+Different keys, different transports, no shared port, no shared files. **The one way these two actually conflict is a config-editing mistake:** when you add Power Tools to a config that already has an `unreal-mcp` entry, merge into the existing server object — never replace the file, and never rename or remove that entry. If you configured Power Tools under a different key in an older setup, rename it to `powertools` and confirm it doesn't collide with `unreal-mcp` in that same file.
+
+**One useful interaction.** Both require **Python Editor Scripting** enabled for the project. Turning it on for Epic's server therefore also lets UEFN auto-run Power Tools' `init_unreal.py` at the next editor startup — so if you enabled Python for Epic's server and have already copied `python/` into place, the Power Tools bridge may already be starting on its own.
+
+**One thing to expect.** Epic documents that its tool calls can cause the editor to hitch. Power Tools' bridge writes its heartbeat from an editor tick, so a long enough hitch can stall that heartbeat and make the Power Tools launcher footer show a stale or disconnected status while an Epic tool call is running. This is cosmetic and self-correcting: the bridge is not restarted, no state is lost, and the footer returns to connected once the editor resumes ticking. If it stays disconnected after the editor is responsive again, that's a real problem — see [3. How it connects](#3-how-it-connects).
 
 Power Tools (this server) focuses on bulk queries over a project's actors, plus moderation, dependency, texture, material, and Niagara-usage scanning.
 
+### Optional: register Power Tools with UEFN's own assistant
+
+**Not yet verified end to end — treat this like the community clients above.** The steps below are derived from UEFN's own settings definitions and are believed correct, but no one has yet confirmed a full round trip. If you try it, please report how it went either way.
+
+UEFN's MCP support runs in both directions. Besides serving its own tools (above), it can act as an MCP **client** and connect outward to other MCP servers, exposing their tools to the assistant built into UEFN. Power Tools speaks stdio MCP, so it can be registered there — and because it needs no network endpoint, no ports or API keys are involved.
+
+The benefit: your Power Tools tools become available inside UEFN itself, without configuring Claude Code, Codex CLI, or Gemini CLI at all. This is **in addition to** the client setup in **[4. Connecting an AI client](#4-connecting-an-ai-client)**, not a replacement — you can run both, and most people using an external client do not need this at all.
+
+**Where.** UEFN → **Edit → Editor Preferences → Plugins → MCP Toolset Servers**. (This is a different page from **Model Context Protocol**, which configures UEFN's own server — the one in the section above.)
+
+**What to enter.** Add an entry to the MCP Servers list:
+
+| Field | Value |
+| --- | --- |
+| Name | `powertools` |
+| Description | anything, e.g. `Trashbyrd's UEFN Power Tools` |
+| Transport | **Local stdio (launch a process)** |
+| Exe Path | the full path to `node` — e.g. `C:/Program Files/nodejs/node.exe` |
+| Args | the full path to your `uefn-server.mjs` |
+| Enabled | checked |
+
+Leave `Server Url`, `Api Key`, and the OAuth fields empty — those apply only to the HTTP transports (`Streamable HTTP` and `Legacy SSE (HTTP+SSE)`), not to stdio.
+
+**Things that will bite you:**
+- **The `Name` must be unique and non-empty.** Registration is refused outright if another configured server already uses that name, and an entry with an empty `Name` — or with no endpoint for its transport (no `Exe Path` for stdio) — is silently skipped at startup with no error in the UI.
+- **Disabled entries are skipped on startup**, so unchecking `Enabled` fully removes it rather than merely hiding it.
+- **This does not start the Python bridge for you.** Exactly as with every external client, you still need `import init_unreal` (or the reload form) in UEFN's Python console, or the tools will be listed but every call will fail. See **[Starting the bridge](#starting-the-bridge)**.
+- **Settings live in `EditorPerProjectUserSettings.ini`** under `[/Script/MCPClientToolset.MCPToolsetSettings]` if you would rather edit it directly than use the UI.
+
 ## Updating
 
-Download the latest release and re-copy the contents of `python/` into `<your-uefn-project>/Content/Python/`, then restart UEFN (or reload the bridge module from the Python console) to pick up changes. If you cloned the source repo, `git pull` instead. If a tool still behaves like the old version afterward, see [A tool seems to be running an old version](#a-tool-seems-to-be-running-an-old-version) — the engine-side copy may need updating too.
+Download the latest release and re-copy the contents of `python/` into `<your-uefn-project>/Plugins/<PluginName>/Content/Python/` (see [step 1](#1-install-the-python-bridge-into-your-uefn-project) if you're unsure which folder that is), then restart UEFN (or reload the bridge module from the Python console) to pick up changes. If you cloned the source repo, `git pull` instead. If a tool still behaves like the old version afterward, see [A tool seems to be running an old version](#a-tool-seems-to-be-running-an-old-version) — the engine-side copy may need updating too.

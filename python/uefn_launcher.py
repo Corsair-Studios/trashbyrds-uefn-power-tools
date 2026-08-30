@@ -31,11 +31,34 @@ except ImportError:
 # never legitimately run concurrently within a single Python interpreter tick.
 _TICK_PUMP_ACTIVE = [False]
 
+# WHY EVERY PUMP BELOW CALLS update(), NOT update_idletasks():
+#
+# These windows have no mainloop() of their own -- UEFN's Slate post-tick
+# callback is the only thing that ever drives Tk here, so whatever the pump
+# calls is the ONLY event processing these windows will ever get.
+#
+# update_idletasks() drains the idle queue only: geometry and redraws. It
+# does not touch the event queue, so <Expose>, <Configure>, mouse, and
+# keyboard events are never serviced at all. A window pumped that way can
+# come up as a blank rectangle -- the initial paint depends on an Expose
+# that never gets delivered -- and stays inert to clicks and typing.
+#
+# update() processes both queues, which is what a mainloop() would do and
+# what these windows actually need. It can dispatch a handler that destroys
+# the window mid-call; every pump below already catches the resulting
+# TclError, and _TICK_PUMP_ACTIVE above guards the re-entry that update()
+# makes possible. Do not "optimize" these back to update_idletasks().
+
 # Consecutive non-TclError exceptions tolerated by a tick pump before it
 # unregisters itself, keyed by tick-handle list id() (each pump owns a
 # distinct one-element list, so id() is stable and unique per pump for its
 # lifetime).
 _TICK_PUMP_MAX_FAILURES = 3
+
+# Seconds a heartbeat may go unrefreshed before the launcher footer reports
+# the bridge as disconnected. See _read_heartbeat for why this is 45 and not
+# the 15 it used to be.
+_HEARTBEAT_STALE_AFTER = 45.0
 
 
 # ---------------------------------------------------------------------------
@@ -163,14 +186,25 @@ def _read_heartbeat():
             "actor_count": 0,
         }
 
-    # Check if heartbeat is recent (within 15 seconds)
+    # Check if the heartbeat is recent. uefn_bridge writes one every 5s from
+    # an editor tick, so this window is a count of missed beats tolerated
+    # before the footer claims "disconnected".
+    #
+    # 15s (3 beats) was too tight once Epic's official UEFN MCP server
+    # entered the picture: Epic documents that its tool calls can hitch the
+    # editor, and the bridge's ticker doesn't fire during a hitch, so a long
+    # Epic call could stall the heartbeat past 15s and make the footer
+    # report a disconnection that never happened -- sending users into the
+    # bridge troubleshooting steps for a bridge that was fine. 45s (9 beats)
+    # rides out a hitch while still going stale quickly enough to be useful
+    # when the bridge has genuinely stopped.
     ts_str = data.get("timestamp", "")
     connected = False
     if ts_str and data.get("status") == "running":
         try:
             ts = datetime.datetime.fromisoformat(ts_str)
             age = (datetime.datetime.now() - ts).total_seconds()
-            connected = age < 15.0
+            connected = age < _HEARTBEAT_STALE_AFTER
         except Exception:
             pass
 
@@ -532,7 +566,7 @@ def _show_mcp_info():
         _TICK_PUMP_ACTIVE[0] = True
         try:
             if win.winfo_exists():
-                win.update_idletasks()
+                win.update()  # not update_idletasks -- see the note at the top of this file
             else:
                 if _mcp_tick[0]:
                     unreal.unregister_slate_post_tick_callback(_mcp_tick[0])
@@ -1784,7 +1818,7 @@ def _show_tag_inspect_window(tag_inspect_module):
         _TICK_PUMP_ACTIVE[0] = True
         try:
             if win.winfo_exists():
-                win.update_idletasks()
+                win.update()  # not update_idletasks -- see the note at the top of this file
             else:
                 if _tag_tick[0]:
                     unreal.unregister_slate_post_tick_callback(_tag_tick[0])
@@ -2203,7 +2237,7 @@ def show_launcher():
             return
         _TICK_PUMP_ACTIVE[0] = True
         try:
-            root.update_idletasks()
+            root.update()  # not update_idletasks -- see the note at the top of this file
         except tk.TclError:
             # Window was closed -- unregister the tick callback
             if _tick_handle[0] is not None:

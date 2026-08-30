@@ -211,6 +211,38 @@ try:
     _this_dir = _sync_os.path.dirname(_sync_os.path.abspath(__file__))
     _own_stamp = _read_stamp(_this_dir)
 
+    # Maximum levels to walk upward from a .../Content/Python directory
+    # looking for the *.uefnproject that owns it. A real UEFN project needs
+    # 4 (Python -> Content -> <plugin> -> Plugins -> <project>); the older
+    # flat layout needs 2. 6 leaves headroom for an unusual nesting without
+    # ever walking far enough to hit a drive root and match some unrelated
+    # project file far above.
+    _UEFNPROJECT_SEARCH_DEPTH = 6
+
+    def _find_uefnproject_dir(_start_dir):
+        """Walk upward from a .../Content/Python dir to the directory holding
+        the owning ``*.uefnproject``; return None if there isn't one.
+
+        Deliberately NOT a fixed-depth ``dirname(dirname(...))``: UEFN does
+        not put ``Content`` next to the ``.uefnproject``, it nests it under
+        ``Plugins/<PluginName>/``, so the project file sits 4 levels up in a
+        real project and 2 in the older flat layout this code was written
+        against. Assuming either depth makes the other invisible, which is
+        exactly how self-sync came to be inert on every standard project.
+        """
+        _dir = _sync_os.path.abspath(_start_dir)
+        for _ in range(_UEFNPROJECT_SEARCH_DEPTH + 1):
+            try:
+                if _sync_glob.glob(_sync_os.path.join(_dir, "*.uefnproject")):
+                    return _dir
+            except Exception:
+                return None
+            _parent = _sync_os.path.dirname(_dir)
+            if not _parent or _parent == _dir:
+                return None  # hit the drive root
+            _dir = _parent
+        return None
+
     # Candidate "Fortnite Projects" roots. Documents is frequently redirected
     # (OneDrive Known Folder Move) so the plain ~\Documents path alone misses
     # real projects — a real user was stuck on a stale engine copy because
@@ -220,10 +252,10 @@ try:
     # signals (folder-name guess, OneDrive env vars, and the authoritative
     # Windows "Personal" known folder from the registry) and dedupe — any
     # one of them finding the real path is enough. A candidate only counts
-    # if its project dir (2 levels up from .../Content/Python: Content/Python
-    # -> Content -> project) holds a *.uefnproject — otherwise we'd copy
-    # from any folder that merely happens to be named right — and if it
-    # actually ships a stamp file.
+    # if some directory above it holds a *.uefnproject (found by walking up,
+    # see _find_uefnproject_dir — never by assuming a fixed depth) —
+    # otherwise we'd copy from any folder that merely happens to be named
+    # right — and if it actually ships a stamp file.
     _home = _sync_os.path.expanduser("~")
     _roots = []
 
@@ -279,27 +311,80 @@ try:
     except Exception:
         pass
 
+    # 6. UEFN_PROJECTS_ROOT — the explicit escape hatch. Everything else
+    #    here is inference, and inference cannot cover every machine: a user
+    #    may keep projects on D:\Work\UEFN, a network share, or anywhere
+    #    else that no convention predicts. Anyone in that position can set
+    #    one environment variable and be done. Documented in INSTALL.md
+    #    under "A tool seems to be running an old version".
+    try:
+        _projects_root_env = _sync_os.environ.get("UEFN_PROJECTS_ROOT")
+        if _projects_root_env:
+            _add_root(_sync_os.path.abspath(_projects_root_env))
+    except Exception:
+        pass
+
+    # 7. The directory holding the project THIS copy is running from, if it
+    #    is itself inside one — which is the normal case, because UEFN runs
+    #    the project copy's init_unreal.py as a startup script. Picks up
+    #    sibling projects in the same folder too, so a user with
+    #    C:\UEFN\ProjA and C:\UEFN\ProjB gets both from either one.
+    #
+    #    This is the root that actually covers projects living outside
+    #    Documents\Fortnite Projects. Note what does NOT work here and why:
+    #    asking the engine via unreal.Paths.project_dir() looks like the
+    #    authoritative answer but is not — in UEFN that resolves to the
+    #    EMBEDDED FortniteGame project in the game install, not the user's
+    #    island, which is only a mounted plugin. asset_usage.py carries the
+    #    same warning after that assumption caused it to scan the game
+    #    install and report every real user asset as a ghost. Anything
+    #    derived from it fails the *.uefnproject check below anyway
+    #    (FortniteGame ships a .uproject, never a .uefnproject), so it is
+    #    left out rather than kept as a misleading no-op.
+    #
+    #    Consequence worth knowing: an engine-side copy running on its own
+    #    has nothing in its path to hint where projects live, so for a
+    #    project outside the Documents roots above, root 6 is the answer.
+    try:
+        _own_project_dir = _find_uefnproject_dir(_this_dir)
+        if _own_project_dir:
+            _add_root(_sync_os.path.dirname(_own_project_dir))
+    except Exception:
+        pass
+
     _candidates = []
-    _seen_py_dirs = set()
+    # Seeded with our own directory so this copy can never be a candidate to
+    # copy over itself. Before root 6/7 existed, _this_dir (the engine copy)
+    # was never reachable from any root, so this could not happen; now that
+    # discovery can start from the loaded project, a project copy running
+    # this code would otherwise find itself, and copyfile(src, src) raises
+    # SameFileError for every file in the directory.
+    _seen_py_dirs = set([_sync_os.path.normcase(_sync_os.path.abspath(_this_dir))])
     for _root in _roots:
+        # Both layouts, because UEFN uses the second one: the older flat
+        # <project>/Content/Python, and the real UEFN layout that nests
+        # Content under the project's plugin. Globbing only the first is
+        # what made this discovery find nothing on every standard project.
         try:
-            _pattern = _sync_os.path.join(_root, "*", "Content", "Python")
+            _patterns = (
+                _sync_os.path.join(_root, "*", "Content", "Python"),
+                _sync_os.path.join(_root, "*", "Plugins", "*", "Content", "Python"),
+            )
         except Exception:
             continue
-        try:
-            _py_dirs = _sync_glob.glob(_pattern)
-        except Exception:
-            continue
+        _py_dirs = []
+        for _pattern in _patterns:
+            try:
+                _py_dirs.extend(_sync_glob.glob(_pattern))
+            except Exception:
+                continue
         for _py_dir in _py_dirs:
             try:
                 _py_dir_key = _sync_os.path.normcase(_sync_os.path.abspath(_py_dir))
                 if _py_dir_key in _seen_py_dirs:
                     continue
                 _seen_py_dirs.add(_py_dir_key)
-                _project_dir = _sync_os.path.dirname(_sync_os.path.dirname(_py_dir))
-                if not _sync_glob.glob(
-                    _sync_os.path.join(_project_dir, "*.uefnproject")
-                ):
+                if _find_uefnproject_dir(_py_dir) is None:
                     continue
                 if not _sync_os.path.isfile(
                     _sync_os.path.join(_py_dir, "bridge_version.py")

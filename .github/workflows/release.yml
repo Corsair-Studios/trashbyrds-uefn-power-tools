@@ -37,6 +37,28 @@ jobs:
             exit 1
           fi
 
+      # python/bridge_version.py carries the stamp init_unreal.py's bridge
+      # self-sync compares to decide whether to copy newer tools over older
+      # ones. If it drifts from package.json that comparison is meaningless
+      # and the sync silently makes wrong decisions. It drifted to 0.1.1
+      # against a 0.1.4 package precisely because nothing checked it, so
+      # check it here rather than trusting a hand edit at bump time.
+      - name: Verify bridge_version.py matches package.json version
+        shell: bash
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          STAMP=$(sed -n 's/^BRIDGE_VERSION *= *"\([^"]*\)".*/\1/p' python/bridge_version.py)
+          if [ -z "$STAMP" ]; then
+            echo "Could not read BRIDGE_VERSION from python/bridge_version.py"
+            exit 1
+          fi
+          if [ "$STAMP" != "$PKG" ]; then
+            echo "python/bridge_version.py BRIDGE_VERSION ($STAMP) does not match package.json version ($PKG)."
+            echo "Update BRIDGE_VERSION to $PKG and commit it as part of the version bump."
+            exit 1
+          fi
+          echo "BRIDGE_VERSION $STAMP matches package.json"
+
       - name: Assemble release archive
         shell: bash
         run: |
