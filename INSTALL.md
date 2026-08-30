@@ -131,7 +131,7 @@ Once `python/` is in place (step 1), Power Tools also registers itself with UEFN
 
 **Requirements:** **Python Editor Scripting** enabled for the project (the same setting Epic's own MCP server needs), and a UEFN build that ships the Toolset Registry.
 
-**When it runs.** Registration happens when `init_unreal.py` runs — and UEFN only auto-runs that if the project is already mounted when Python initializes, which in practice it usually is not (with Epic's MCP server set to auto-start, Python initializes at editor boot, before any project is open). So after opening your project, run `import pt` (or `import init_unreal`) in the Python console once per session — `import pt` bootstraps everything and opens the launcher in one step.
+**When it runs.** Registration happens when `init_unreal.py` runs — and UEFN only auto-runs that if the project is already mounted when Python initializes, which in practice it usually is not (with Epic's MCP server set to auto-start, Python initializes at editor boot, before any project is open). This interaction is a known UEFN issue with bugs already filed against it, so it may change in a future UEFN release — `import pt` works correctly either way, skipping its bootstrap whenever the auto-run did fire. So after opening your project, run `import pt` (or `import init_unreal`) in the Python console once per session — `import pt` bootstraps everything and opens the launcher in one step.
 
 **How to tell it worked.** The Output Log shows one of:
 
