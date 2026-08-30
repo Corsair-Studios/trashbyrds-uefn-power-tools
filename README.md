@@ -1,6 +1,6 @@
 # Trashbyrd's UEFN Power Tools
 
-An MCP server and in-editor Python bridge for live, chat-driven inspection and editing of a UEFN project — devices, assets, materials, Niagara systems, Verse, and classic actors at scale.
+Native UEFN toolsets, an MCP server, and an in-editor Python bridge for live, chat-driven inspection and editing of a UEFN project — devices, assets, materials, Niagara systems, Verse, and classic actors at scale. Copy one folder, type `import pt`, and the tools stand alongside Epic's own inside UEFN's assistant; connect an external AI client too if you want one.
 
 ![Trashbyrd's Power Tools panel running inside UEFN, showing the device audit and asset browser tools](docs/trashbyrds_power_tools_panel.png)
 
@@ -34,6 +34,10 @@ Epic ships its own official UEFN MCP server, and you can run Power Tools alongsi
 - **Offline scanning.** Some scans read UEFN's `__ExternalActors__` files directly off disk and work even when UEFN isn't running.
 
 ## What's in the box
+
+### Native UEFN toolsets (29 tools, no Node required)
+
+Copying `python/` into your project and running `import pt` registers three toolsets — `PowerToolsInspect`, `PowerToolsScan`, `PowerToolsEdit` — with UEFN's own Toolset Registry, alongside Epic's built-in toolsets. UEFN's assistant can call them directly, and they are discoverable through Epic's official MCP server's tool search. See [INSTALL.md](INSTALL.md#1b-native-uefn-toolsets-no-node-no-config-file).
 
 ### MCP tools (30)
 

@@ -2,8 +2,13 @@
 
 ## System requirements
 
+For the default install — Power Tools' tools inside UEFN itself (step 1, then `import pt`):
+
 - **UEFN** (Unreal Editor for Fortnite) installed, with your project open.
 - The **Python Editor Script Plugin** enabled in UEFN (`Edit -> Plugins`, search "Python Editor Script Plugin", enable it, restart UEFN if prompted).
+
+Additionally, ONLY if you also want to drive Power Tools from an external AI client (sections 2–4):
+
 - **Node.js 18+** on the machine running the MCP server.
 - An MCP-capable client (e.g. Claude Code) to talk to the server.
 
@@ -122,11 +127,11 @@ Point it at the parent folder, not at a single project. If your project is `D:\W
 
 ## 1b. Native UEFN toolsets (no Node, no config file)
 
-**New, and not yet verified end to end — see the caveat at the end of this section.**
+**This is the default install — for most people, step 1 plus `import pt` is the whole setup.**
 
-Once `python/` is in place (step 1), Power Tools also registers itself with UEFN's own Toolset Registry. Its tools then appear inside UEFN alongside Epic's built-in toolsets, and UEFN's own assistant can call them directly.
+Once `python/` is in place (step 1), Power Tools registers itself with UEFN's own Toolset Registry. Its tools then appear inside UEFN alongside Epic's built-in toolsets — same registry, same discovery, same assistant — and are also discoverable through Epic's official MCP server's tool search (`list_toolsets`).
 
-**Nothing else is required.** No Node, no `uefn-server.mjs`, no `.mcp.json`, no bridge directory, and no external client. If this is all you want, you can stop after step 1 — sections 2 and 4 exist for driving Power Tools from Claude Code, Codex CLI, or Gemini CLI, which remains fully supported and unchanged.
+**Nothing else is required.** No Node, no `uefn-server.mjs`, no `.mcp.json`, no bridge directory, and no external client. Sections 2 and 4 exist for the second, fully supported path: driving Power Tools from Claude Code, Codex CLI, or Gemini CLI. You can use either path or both at once.
 
 **Requirements:** **Python Editor Scripting** enabled for the project (the same setting Epic's own MCP server needs), and a UEFN build that ships the Toolset Registry.
 
@@ -153,9 +158,11 @@ The second line is not an error — it means this UEFN build has no Toolset Regi
 
 `batch_set` defaults to a dry run, so a bulk edit reports what it would change before changing anything.
 
-**Caveat, stated plainly.** This uses an Epic API that is marked Experimental and is not covered by Epic's public documentation, so a future UEFN build could change or remove it. The registration is fully isolated: if the API goes away, it logs the "unavailable" line above and the MCP server, the file-IPC bridge, and the launcher all keep working exactly as they do today. Please report whether it worked for you either way.
+**Caveat, stated plainly.** This is verified working (registration, discovery through Epic's MCP tool search, and a live bridge were all confirmed against a real project on 2026-08-30), but it rides on an Epic API that is marked Experimental and is not covered by Epic's public documentation, so a future UEFN build could change or remove it. The registration is fully isolated: if the API goes away, it logs the "unavailable" line above and the MCP server, the file-IPC bridge, and the launcher all keep working exactly as they do today. Please report anything that behaves differently on your build.
 
 ## 2. Run the MCP server
+
+**Only needed for external AI clients.** If the native toolsets from section 1b are all you want, you are already done — skip sections 2 through 4 entirely. Continue here to drive Power Tools from Claude Code, Codex CLI, Gemini CLI, or another MCP client, which works alongside the native path.
 
 If you downloaded a release, you already have everything you need: the zip includes `uefn-server.mjs` at its root, a self-contained bundle with no dependencies to install. Run it directly:
 
@@ -408,13 +415,13 @@ Different keys, different transports, no shared port, no shared files. **The one
 
 Power Tools (this server) focuses on bulk queries over a project's actors, plus moderation, dependency, texture, material, and Niagara-usage scanning.
 
-### Optional: register Power Tools with UEFN's own assistant
+### Fallback: the MCP Toolset Servers page (only if native registration reported unavailable)
+
+**You almost certainly do not need this.** On a UEFN build that ships the Toolset Registry, the native registration from **[section 1b](#1b-native-uefn-toolsets-no-node-no-config-file)** already puts Power Tools inside UEFN's assistant, and an entry on this page would only add a second, slower copy of the same tools through more moving parts. The one audience for this section: a UEFN build **without** the Toolset Registry — the Output Log said `Trashbyrd: native UEFN toolsets unavailable this session`. For that build, the page below is the only remaining way into UEFN's assistant.
 
 **Not yet verified end to end — treat this like the community clients above.** The steps below are derived from UEFN's own settings definitions and are believed correct, but no one has yet confirmed a full round trip. If you try it, please report how it went either way.
 
 UEFN's MCP support runs in both directions. Besides serving its own tools (above), it can act as an MCP **client** and connect outward to other MCP servers, exposing their tools to the assistant built into UEFN. Power Tools speaks stdio MCP, so it can be registered there — and because it needs no network endpoint, no ports or API keys are involved.
-
-The benefit: your Power Tools tools become available inside UEFN itself, without configuring Claude Code, Codex CLI, or Gemini CLI at all. This is **in addition to** the client setup in **[4. Connecting an AI client](#4-connecting-an-ai-client)**, not a replacement — you can run both, and most people using an external client do not need this at all.
 
 **Where.** UEFN → **Edit → Editor Preferences → Plugins → MCP Toolset Servers**. (This is a different page from **Model Context Protocol**, which configures UEFN's own server — the one in the section above.)
 
