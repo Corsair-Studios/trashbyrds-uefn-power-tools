@@ -6,3 +6,4 @@ python/device_audit_*.json
 python/*.log
 .DS_Store
 *.bak
+release/
