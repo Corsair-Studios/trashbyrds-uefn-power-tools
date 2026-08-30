@@ -73,11 +73,13 @@ The MCP server and the in-editor Python bridge are two separate processes handin
 
 See [INSTALL.md](INSTALL.md) for full setup steps, including how to connect the MCP server to your AI client of choice (Claude Code, Gemini CLI, Codex CLI, Cursor, Windsurf, Antigravity IDE, or VS Code Copilot).
 
-Once your project is open in UEFN, start the bridge from UEFN's Python console by running:
+Once your project is open in UEFN, start everything from UEFN's Python console by running:
 
 ```python
-import init_unreal
+import pt
 ```
+
+(Not `import init_unreal` — that module name now resolves to a file Epic's own plugins ship; [INSTALL.md](INSTALL.md#starting-the-bridge) explains.)
 
 ## Issues
 

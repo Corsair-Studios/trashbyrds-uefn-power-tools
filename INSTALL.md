@@ -31,7 +31,7 @@ Read the INSTALL.md at https://github.com/Corsair-Studios/trashbyrds-uefn-power-
 - Verification after unpacking: `uefn-server.mjs` exists at the top level, and the `version` field in `package.json` matches the release tag that was downloaded (tag `v0.1.3` corresponds to version `0.1.3`). A mismatch means the wrong artifact was used.
 - The destination folder needs to be permanent — not Downloads, not a temp folder, not a location a cleanup or reinstall would remove — because the client config hard-codes the absolute path to `uefn-server.mjs`. Moving the folder later breaks the config until the path is updated.
 
-**What it cannot do for you.** An assistant editing config files cannot verify the bridge is actually running inside UEFN. That check requires UEFN open with your project loaded, running `import init_unreal` or `import pt` in UEFN's Python console (UEFN auto-runs a project's `init_unreal.py` only if the project is already mounted when Python initializes — and with Epic's MCP server set to auto-start, Python now initializes at editor boot, before any project is open, so in practice the auto-run rarely fires and the manual run is the normal path; `import pt` performs it for you if it hasn't happened), and confirming a fresh `heartbeat.json` appears in the bridge's IPC directory. See **[3. How it connects](#3-how-it-connects)** below for what a working versus non-working bridge looks like and why a client's own "Connected" status isn't proof either way.
+**What it cannot do for you.** An assistant editing config files cannot verify the bridge is actually running inside UEFN. That check requires UEFN open with your project loaded, running `import pt` in UEFN's Python console (UEFN auto-runs a project's `init_unreal.py` only if the project is already mounted when Python initializes — and with Epic's MCP server set to auto-start, Python now initializes at editor boot, before any project is open, so in practice the auto-run rarely fires and `import pt` is the normal path; do not use `import init_unreal`, which now resolves to a file Epic ships — see **Starting the bridge**), and confirming a fresh `heartbeat.json` appears in the bridge's IPC directory. See **[3. How it connects](#3-how-it-connects)** below for what a working versus non-working bridge looks like and why a client's own "Connected" status isn't proof either way.
 
 ## 1. Install the Python bridge into your UEFN project
 
@@ -60,25 +60,24 @@ After copying, `Plugins/<PluginName>/Content/Python/` should contain `init_unrea
 
 **Once the files are in place:**
 
-- Start the Python bridge by opening UEFN's Python console once your project is open and running `import init_unreal` — see **Starting the bridge** below.
+- Start Power Tools by opening UEFN's Python console once your project is open and running `import pt` — see **Starting the bridge** below.
 - If UEFN prompts you to enable the Python Editor Script Plugin, accept it and restart UEFN.
-- Once the bridge is started, run `import pt` in the same console to open the Power Tools window.
 
 ### Starting the bridge
 
 Open UEFN's Python console (Output Log panel → console dropdown → **Python**) and run:
 
 ```python
-import init_unreal
+import pt
 ```
 
-That starts the bridge, launcher, and Tools-menu entries in one call. Follow it with `import pt` to open the Power Tools window.
+That one command initializes everything — the bridge, the native toolsets, the Tools-menu entries — and opens the Power Tools window. Run it once per UEFN session, after each restart of UEFN.
 
-**Symptom if you skip this step:** no Power Tools launcher window, no Tools-menu entries, and the MCP server reports the bridge unreachable.
+**Symptom if you skip this step:** no Power Tools window, no native toolsets, and the MCP server reports the bridge unreachable.
 
-Run `import init_unreal` once per UEFN session — after each restart of UEFN, repeat the step.
+**Do not use `import init_unreal` to start Power Tools.** It used to be the documented command, and it no longer works: Epic's experimental Toolsets plugins now ship their own `init_unreal.py` files, and their directories sit ahead of your project's on Python's search path — so `import init_unreal` silently loads and runs **Epic's** file instead of this project's. The telltale is a wall of `LogToolsetRegistry: Warning: Toolset '...' already registered` lines and no `Trashbyrd:` lines at all. `import pt` is immune: it locates this project's `init_unreal.py` by its file path, next to `pt.py` itself.
 
-**If `import init_unreal` produces no output and nothing starts:** Python only runs a module's top-level code the *first* time it's imported in a session — once `init_unreal` is already in `sys.modules` (for example, from an earlier import that session), a repeat `import init_unreal` is a silent no-op: no output, no bridge, no error. To force it to actually run again, reload the module instead:
+**If the bridge needs a restart mid-session** (a client can't reach it and the launcher footer agrees), reload the bridge module directly:
 
 ```python
 import importlib, uefn_bridge
@@ -87,7 +86,7 @@ importlib.reload(uefn_bridge)
 
 ### "Rejected command.json with missing/mismatched session token"
 
-**Known issue, not yet fixed.** If the Output Log shows `uefn_bridge: Bridge started.` twice in a row, followed by a rejection message like this, two bridge instances registered with two different session tokens and are now fighting over the same IPC files. **Fix:** restart UEFN to clear the duplicate registration — a full restart, not just re-running `import init_unreal` or reloading the module.
+**Known issue, not yet fixed.** If the Output Log shows `uefn_bridge: Bridge started.` twice in a row, followed by a rejection message like this, two bridge instances registered with two different session tokens and are now fighting over the same IPC files. **Fix:** restart UEFN to clear the duplicate registration — a full restart, not just re-running `import pt` or reloading the module.
 
 ### A tool seems to be running an old version
 
@@ -131,7 +130,7 @@ Once `python/` is in place (step 1), Power Tools also registers itself with UEFN
 
 **Requirements:** **Python Editor Scripting** enabled for the project (the same setting Epic's own MCP server needs), and a UEFN build that ships the Toolset Registry.
 
-**When it runs.** Registration happens when `init_unreal.py` runs — and UEFN only auto-runs that if the project is already mounted when Python initializes, which in practice it usually is not (with Epic's MCP server set to auto-start, Python initializes at editor boot, before any project is open). This interaction is a known UEFN issue with bugs already filed against it, so it may change in a future UEFN release — `import pt` works correctly either way, skipping its bootstrap whenever the auto-run did fire. So after opening your project, run `import pt` (or `import init_unreal`) in the Python console once per session — `import pt` bootstraps everything and opens the launcher in one step.
+**When it runs.** Registration happens when `init_unreal.py` runs — and UEFN only auto-runs that if the project is already mounted when Python initializes, which in practice it usually is not (with Epic's MCP server set to auto-start, Python initializes at editor boot, before any project is open). This interaction is a known UEFN issue with bugs already filed against it, so it may change in a future UEFN release — `import pt` works correctly either way, skipping its bootstrap whenever the auto-run did fire. So after opening your project, run `import pt` in the Python console once per session — it bootstraps everything and opens the launcher in one step. (Not `import init_unreal`: that name now resolves to a file Epic ships — see **Starting the bridge**.)
 
 **How to tell it worked.** The Output Log shows one of:
 
@@ -236,7 +235,7 @@ import importlib, uefn_bridge
 importlib.reload(uefn_bridge)
 ```
 
-Do not just run `import init_unreal` on its own if you have already imported it earlier in this UEFN session — Python only executes a module's startup code the *first* time it's imported per session, so a second plain `import init_unreal` is a silent no-op with no output, no bridge, and no error. The `importlib.reload(uefn_bridge)` form above forces the bridge to actually (re)start regardless of what you've already imported this session, so it's the reliable command to run before connecting a client. If this is the very first thing you've run this UEFN session, `import init_unreal` also works, but the reload form above is always safe and always works.
+If Power Tools hasn't been started at all this session, `import pt` also works and additionally opens the launcher window. Do not use `import init_unreal` — that module name now resolves to a file Epic ships, not this project's (see **Starting the bridge**). The `importlib.reload(uefn_bridge)` form above forces the bridge to actually (re)start regardless of what's already loaded this session, so it's the reliable command to run before connecting a client.
 
 **6. Verify it worked.** In Claude Code, ask it to call the `uefn_status` tool (or just ask "check the UEFN bridge status"). A real, working connection returns a specific level name and an actor count greater than zero. If you get an error, a generic "unreachable" message, or no level name, the bridge is not actually running even if Claude Code's own connection indicator looks fine — go back to step 5.
 
@@ -276,7 +275,7 @@ import importlib, uefn_bridge
 importlib.reload(uefn_bridge)
 ```
 
-This reload form reliably (re)starts the bridge regardless of whether `init_unreal` was already imported earlier in this UEFN session — a plain repeated `import init_unreal` is a silent no-op (no output, no bridge, no error) once it's already in `sys.modules`. Run this once per UEFN session, and again after every UEFN restart.
+This reload form reliably (re)starts the bridge regardless of what's already loaded this session. (`import pt` also works if Power Tools hasn't started yet, and opens the launcher too; `import init_unreal` does not — that name now resolves to a file Epic ships, see **Starting the bridge**.) Run this once per UEFN session, and again after every UEFN restart.
 
 **6. Verify it worked.** From a Codex CLI session, ask it to call the `uefn_status` tool. A working connection returns a real level name and an actor count greater than zero — that's the only proof that matters. A "Connected" server status in Codex CLI on its own only means Node launched successfully, not that UEFN's bridge is reachable.
 
@@ -321,7 +320,7 @@ import importlib, uefn_bridge
 importlib.reload(uefn_bridge)
 ```
 
-This reliably (re)starts the bridge even if `init_unreal` was already imported earlier this session (a plain repeated `import init_unreal` is a silent no-op once it's already in `sys.modules`). Run this once per UEFN session, and again after every UEFN restart.
+This reliably (re)starts the bridge regardless of what's already loaded this session. (`import pt` also works if Power Tools hasn't started yet; `import init_unreal` does not — that name now resolves to a file Epic ships, see **Starting the bridge**.) Run this once per UEFN session, and again after every UEFN restart.
 
 **6. Verify it worked.** From a Gemini CLI session, ask it to call the `uefn_status` tool. A working connection returns a real level name and an actor count greater than zero. A "Connected" status for the server on its own only confirms Node started — it does not confirm the bridge is reachable.
 
@@ -435,7 +434,7 @@ Leave `Server Url`, `Api Key`, and the OAuth fields empty — those apply only t
 **Things that will bite you:**
 - **The `Name` must be unique and non-empty.** Registration is refused outright if another configured server already uses that name, and an entry with an empty `Name` — or with no endpoint for its transport (no `Exe Path` for stdio) — is silently skipped at startup with no error in the UI.
 - **Disabled entries are skipped on startup**, so unchecking `Enabled` fully removes it rather than merely hiding it.
-- **This does not start the Python bridge for you.** Exactly as with every external client, you still need `import init_unreal` (or the reload form) in UEFN's Python console, or the tools will be listed but every call will fail. See **[Starting the bridge](#starting-the-bridge)**.
+- **This does not start the Python bridge for you.** Exactly as with every external client, you still need `import pt` (or the reload form) in UEFN's Python console, or the tools will be listed but every call will fail. See **[Starting the bridge](#starting-the-bridge)**.
 - **Settings live in `EditorPerProjectUserSettings.ini`** under `[/Script/MCPClientToolset.MCPToolsetSettings]` if you would rather edit it directly than use the UI.
 
 ## Updating
