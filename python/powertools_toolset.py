@@ -918,8 +918,9 @@ def _ensure_mcp_allowlisted():
     try:
         settings_cls = getattr(unreal, "ToolsetRegistrySettings", None)
         if settings_cls is None:
-            return "settings class not exposed to Python — add entries by hand " \
-                   "in Editor Preferences → Plugins → Toolset Registry"
+            return "settings class not exposed to Python (and the " \
+                   "Editor Preferences page has been field-tested as not " \
+                   "affecting MCP visibility either)"
         settings = unreal.get_default_object(settings_cls)
         prop_name = None
         for cand in ("toolset_allowed_names", "ToolsetAllowedNames"):
@@ -927,8 +928,7 @@ def _ensure_mcp_allowlisted():
                 prop_name = cand
                 break
         if prop_name is None:
-            return "no allow-list property found on {} — add entries by hand " \
-                   "in Editor Preferences → Plugins → Toolset Registry".format(
+            return "no allow-list property found on {}".format(
                        settings_cls.__name__)
         current = [str(x) for x in getattr(settings, prop_name)]
         wanted = ["powertools_toolset." + cls.__name__ for cls in _TOOLSETS]
@@ -969,6 +969,33 @@ def register():
     try:
         reg = Registration(_TOOLSETS)
         if not reg.register():
+            return False
+        # TRUST BUT VERIFY. Registration.register() returning True only
+        # means the calls were made; on current UEFN builds the registry
+        # logs "Registering Toolset powertools_toolset.X" and then the
+        # toolset is NOT in the queryable registry
+        # (is_toolset_registered -> False, absent from
+        # get_all_toolset_json_schemas, invisible to Epic's MCP server) —
+        # confirmed in the field 2026-08-30. Some scope or gate between
+        # the registration call and the registry's contents drops
+        # project-side toolsets; not yet root-caused. Report what is
+        # actually true rather than what the API implied.
+        accepted = []
+        for cls in _TOOLSETS:
+            try:
+                name = "powertools_toolset." + cls.__name__
+                if unreal.ToolsetRegistry.is_toolset_registered(name):
+                    accepted.append(name)
+            except Exception:
+                pass
+        if not accepted:
+            unreal.log_warning(
+                "powertools_toolset: registration calls succeeded but the "
+                "registry did not accept the toolsets (a known limitation "
+                "on current UEFN builds — project-side toolsets do not "
+                "land in the queryable registry). Harmless: the MCP "
+                "bridge, launcher, and all other tools are unaffected.")
+            _registration[0] = reg  # keep for symmetry/unregister
             return False
         _registration[0] = reg
         return True

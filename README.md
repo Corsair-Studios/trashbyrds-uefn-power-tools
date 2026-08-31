@@ -1,6 +1,6 @@
 # Trashbyrd's UEFN Power Tools
 
-Native UEFN toolsets, an MCP server, and an in-editor Python bridge for live, chat-driven inspection and editing of a UEFN project — devices, assets, materials, Niagara systems, Verse, and classic actors at scale. Copy one folder, type `import pt`, and the tools stand alongside Epic's own inside UEFN's assistant; connect an external AI client too if you want one.
+An MCP server and in-editor Python bridge for live, chat-driven inspection and editing of a UEFN project — devices, assets, materials, Niagara systems, Verse, and classic actors at scale. Copy one folder, type `import pt`, connect the AI client of your choice.
 
 ![Trashbyrd's Power Tools panel running inside UEFN, showing the device audit and asset browser tools](docs/trashbyrds_power_tools_panel.png)
 
@@ -35,9 +35,9 @@ Epic ships its own official UEFN MCP server, and you can run Power Tools alongsi
 
 ## What's in the box
 
-### Native UEFN toolsets (30 tools, no Node required)
+### Native UEFN toolsets (30 tools — currently blocked by a UEFN limitation)
 
-Copying `python/` into your project and running `import pt` registers three toolsets — `PowerToolsInspect`, `PowerToolsScan`, `PowerToolsEdit` — with UEFN's own Toolset Registry, alongside Epic's built-in toolsets. UEFN's assistant can call them directly, and they are discoverable through Epic's official MCP server's tool search. This includes Verse compiler diagnostics (`verse_check`), which runs the same headless language-server check as `uefn_verse_check` with no Node involved. See [INSTALL.md](INSTALL.md#1b-native-uefn-toolsets-no-node-no-config-file).
+Power Tools ships three toolsets (`PowerToolsInspect`, `PowerToolsScan`, `PowerToolsEdit`) that register with UEFN's own Toolset Registry, the same mechanism Epic's built-in toolsets use. On current UEFN builds the registry silently drops project-side registrations (Epic's own stick; third-party ones do not), so this does not yet take effect — Power Tools detects that and says so plainly in the Output Log, and nothing else is affected. The code is in place so the feature lights up on its own if a future UEFN build accepts third-party toolsets. Details in [INSTALL.md](INSTALL.md#1b-native-uefn-toolsets-status-blocked-by-a-uefn-limitation).
 
 ### MCP tools (30)
 

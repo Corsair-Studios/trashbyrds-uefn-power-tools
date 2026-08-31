@@ -632,11 +632,12 @@ try:
     if _pt_toolset.register():
         unreal.log("Trashbyrd: native UEFN toolsets registered")
     else:
-        # Not an error: this UEFN build has no Toolset Registry, or it
-        # isn't available yet. The MCP/bridge path is unaffected.
+        # Not an error: this UEFN build has no Toolset Registry, or the
+        # registry did not accept the toolsets (register() logs which,
+        # one line above). The MCP/bridge path is unaffected either way.
         unreal.log(
-            "Trashbyrd: native UEFN toolsets unavailable this session "
-            "(Toolset Registry not present) — MCP bridge unaffected"
+            "Trashbyrd: native UEFN toolsets not active this session "
+            "— see the powertools_toolset line above; MCP bridge unaffected"
         )
     del _pt_toolset
 except Exception as _ts_exc:

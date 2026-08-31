@@ -125,40 +125,24 @@ Point it at the parent folder, not at a single project. If your project is `D:\W
 
 **Worth knowing:** your project's *folder* name doesn't have to match the island name inside it. A folder called `MyGame_` holding an island called `MyGame` is fine and is handled — you don't need to rename anything.
 
-## 1b. Native UEFN toolsets (no Node, no config file)
+## 1b. Native UEFN toolsets (status: blocked by a UEFN limitation)
 
-**This is the default install — for most people, step 1 plus `import pt` is the whole setup.**
+Power Tools ships three native toolsets (`PowerToolsInspect`, `PowerToolsScan`, `PowerToolsEdit` — 30 tools) that register with UEFN's own Toolset Registry, the same mechanism Epic's built-in toolsets use, with the goal of appearing alongside them to any registry consumer with no Node, no config file, and no external client.
 
-Once `python/` is in place (step 1), Power Tools registers itself with UEFN's own Toolset Registry. Its tools then appear inside UEFN alongside Epic's built-in toolsets — same registry, same discovery, same assistant — and are also discoverable through Epic's official MCP server's tool search (`list_toolsets`).
+**Current status, honestly: registration does not take effect on current UEFN builds.** The registry logs `Registering Toolset powertools_toolset.PowerToolsInspect` exactly as it does for Epic's own — and then the toolset is not in the queryable registry: `unreal.ToolsetRegistry.is_toolset_registered(...)` returns false, it is absent from the registry's schema dump, and Epic's MCP server cannot see or call it. Something between the registration call and the registry's contents silently drops project-side toolsets; Epic's own registrations from engine plugin directories stick, ours do not. This has been traced far enough to rule out the visible knobs (the Toolset Registry preferences page, MCP server restarts, registration timing) and appears to be a scope or gate inside the Experimental registry itself. Power Tools now checks and tells the truth about this at startup:
 
-**Nothing else is required.** No Node, no `uefn-server.mjs`, no `.mcp.json`, no bridge directory, and no external client. Sections 2 and 4 exist for the second, fully supported path: driving Power Tools from Claude Code, Codex CLI, or Gemini CLI. You can use either path or both at once.
+```
+powertools_toolset: registration calls succeeded but the registry did not accept the toolsets (a known limitation on current UEFN builds ...)
+Trashbyrd: native UEFN toolsets not active this session — see the powertools_toolset line above; MCP bridge unaffected
+```
 
-**Requirements:** **Python Editor Scripting** enabled for the project (the same setting Epic's own MCP server needs), and a UEFN build that ships the Toolset Registry.
-
-**When it runs.** Registration happens when `init_unreal.py` runs — and UEFN only auto-runs that if the project is already mounted when Python initializes, which in practice it usually is not (with Epic's MCP server set to auto-start, Python initializes at editor boot, before any project is open). This interaction is a known UEFN issue with bugs already filed against it, so it may change in a future UEFN release — `import pt` works correctly either way, skipping its bootstrap whenever the auto-run did fire. So after opening your project, run `import pt` in the Python console once per session — it bootstraps everything and opens the launcher in one step. (Not `import init_unreal`: that name now resolves to a file Epic ships — see **Starting the bridge**.)
-
-**How to tell it worked.** The Output Log shows one of:
+**This costs you nothing else.** The bridge, the launcher, every MCP tool, and the external-client path in sections 2–4 are completely unaffected — those are the supported ways to use Power Tools today. The native registration code stays in place and self-reports, so if a future UEFN build starts accepting third-party toolsets, it will light up on its own:
 
 ```
 Trashbyrd: native UEFN toolsets registered
-Trashbyrd: native UEFN toolsets unavailable this session (Toolset Registry not present) — MCP bridge unaffected
 ```
 
-The second line is not an error — it means this UEFN build has no Toolset Registry, and everything else about Power Tools works as before. If **neither** line appears, `init_unreal.py` has not run this session at all — run `import pt` in the Python console.
-
-**Where the tools appear — and where they don't.** These toolsets register with UEFN's **Toolset Registry** and surface through UEFN's own AI assistant. They do **not** appear on the **Editor Preferences → Plugins → MCP Toolset Servers** page — that page only lists outbound server connections you add there yourself (see the optional section under **[5. Epic's official UEFN MCP server](#5-epics-official-uefn-mcp-server)**), and it starts with one blank placeholder entry that belongs to no one.
-
-**What gets registered.** Three toolsets, 30 tools, each returning JSON:
-
-| Toolset | Covers |
-| --- | --- |
-| `PowerToolsInspect` | Status, level info, devices, actor properties, bulk queries, asset listing and inspection, device audit |
-| `PowerToolsScan` | Health, dependency and asset sweeps; texture, material and Niagara usage; Verse tags; Verse compiler diagnostics (`verse_check`); moderation/IP pre-flight |
-| `PowerToolsEdit` | Select actors, set properties (single and bulk), spawn, duplicate, set transforms |
-
-`batch_set` defaults to a dry run, so a bulk edit reports what it would change before changing anything.
-
-**Caveat, stated plainly.** This is verified working (registration, discovery through Epic's MCP tool search, and a live bridge were all confirmed against a real project on 2026-08-30), but it rides on an Epic API that is marked Experimental and is not covered by Epic's public documentation, so a future UEFN build could change or remove it. The registration is fully isolated: if the API goes away, it logs the "unavailable" line above and the MCP server, the file-IPC bridge, and the launcher all keep working exactly as they do today. Please report anything that behaves differently on your build.
+**Still run `import pt` once per session** — that starts the bridge and the launcher regardless (see **Starting the bridge**), and is what attempts this registration.
 
 ## 2. Run the MCP server
 
@@ -419,7 +403,7 @@ Power Tools (this server) focuses on bulk queries over a project's actors, plus 
 
 ### Fallback: the MCP Toolset Servers page (only if native registration reported unavailable)
 
-**You almost certainly do not need this.** On a UEFN build that ships the Toolset Registry, the native registration from **[section 1b](#1b-native-uefn-toolsets-no-node-no-config-file)** already puts Power Tools inside UEFN's assistant, and an entry on this page would only add a second, slower copy of the same tools through more moving parts. The one audience for this section: a UEFN build **without** the Toolset Registry — the Output Log said `Trashbyrd: native UEFN toolsets unavailable this session`. For that build, the page below is the only remaining way into UEFN's assistant.
+**Status:** with native toolset registration currently blocked (see section 1b), this page is in principle the way to point UEFN's MCP-client machinery at Power Tools' own stdio server — but it remains unverified end to end, and nothing about it is required: the external clients in section 4 are the supported path.
 
 **Not yet verified end to end — treat this like the community clients above.** The steps below are derived from UEFN's own settings definitions and are believed correct, but no one has yet confirmed a full round trip. If you try it, please report how it went either way.
 
