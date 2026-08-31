@@ -896,6 +896,59 @@ else:
     _TOOLSETS = []
 
 
+def _ensure_mcp_allowlisted():
+    """Best-effort: put our toolsets on the registry's MCP allow list.
+
+    Registering with the Toolset Registry and being EXPOSED through Epic's
+    MCP server are two different gates. The registry held ~63 toolsets in
+    the field while `list_toolsets` served ~28: exposure is filtered by
+    `ToolsetAllowedNames` on the Toolset Registry settings (Editor
+    Preferences → Plugins → Toolset Registry). Without an entry there, our
+    toolsets register cleanly and then never appear to any MCP consumer.
+
+    Safety rule, learned before it bit: the allow list means "when
+    NON-empty, only matching toolsets are visible." If we find it EMPTY,
+    the visible-subset filtering is coming from somewhere else (a blocked
+    list, or a build default) — and appending our names to an empty list
+    would instantly hide every Epic toolset from MCP. So we only ever
+    append to a list that already has entries, and otherwise report why.
+
+    Returns a short outcome string for the log; never raises.
+    """
+    try:
+        settings_cls = getattr(unreal, "ToolsetRegistrySettings", None)
+        if settings_cls is None:
+            return "settings class not exposed to Python — add entries by hand " \
+                   "in Editor Preferences → Plugins → Toolset Registry"
+        settings = unreal.get_default_object(settings_cls)
+        prop_name = None
+        for cand in ("toolset_allowed_names", "ToolsetAllowedNames"):
+            if hasattr(settings, cand):
+                prop_name = cand
+                break
+        if prop_name is None:
+            return "no allow-list property found on {} — add entries by hand " \
+                   "in Editor Preferences → Plugins → Toolset Registry".format(
+                       settings_cls.__name__)
+        current = [str(x) for x in getattr(settings, prop_name)]
+        wanted = ["powertools_toolset." + cls.__name__ for cls in _TOOLSETS]
+        missing = [w for w in wanted if w not in current]
+        if not missing:
+            return "already on the MCP allow list"
+        if not current:
+            return "allow list is empty (filtering must come from elsewhere); " \
+                   "NOT appending — doing so would hide every other toolset"
+        setattr(settings, prop_name, current + missing)
+        try:
+            settings.save_config()
+        except Exception:
+            pass  # applied for this session even if persisting failed
+        return "added to the MCP allow list: " + ", ".join(missing)
+    except Exception as exc:
+        return "allow-list update failed ({}: {})".format(
+            type(exc).__name__, exc)
+
+
 def register():
     """Register the Power Tools toolsets with UEFN's Toolset Registry.
 
@@ -907,6 +960,10 @@ def register():
     """
     if not _TOOLSETS:
         return False
+    try:
+        unreal.log("powertools_toolset: MCP exposure — " + _ensure_mcp_allowlisted())
+    except Exception:
+        pass
     if _registration[0] is not None:
         return True
     try:
